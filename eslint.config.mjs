@@ -36,10 +36,10 @@ const eslintConfig = [
     },
 
     rules: {
-      'require-await': 'error',
+      // 'require-await': 'error',
       'no-console': 'warn',
 
-      // 'no-return-await': 'error',
+      'no-return-await': 'error',
       '@typescript-eslint/no-unused-vars': 'warn',
       '@typescript-eslint/no-empty-interface': 'error',
     },
