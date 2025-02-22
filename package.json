@@ -28,7 +28,7 @@
     "eslint-plugin-simple-import-sort": "^12.1.1",
     "postcss": "^8",
     "prettier": "^3.5.2",
-    "tailwindcss": "^4.x",
+    "tailwindcss": "^3.x",
     "typescript": "^5",
     "typescript-eslint": "^8.24.1"
   },
