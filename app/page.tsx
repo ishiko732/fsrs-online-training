@@ -1,101 +1,160 @@
-import Image from "next/image";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+'use client'
+
+import { analyzeCSV } from '@api/services/collect'
+import { Progress } from '@components/ui/progress'
+import { parse } from 'csv-parse/sync'
+import { AlertCircle, FileText, Upload } from 'lucide-react'
+import { useState } from 'react'
+import { useDropzone } from 'react-dropzone'
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded-sm font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [progress, setProgress] = useState(0)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [analysis, setAnalysis] = useState<any>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  const onDrop = async (acceptedFiles: File[]) => {
+    const file = acceptedFiles[0]
+    if (!file) return
+
+    if (!file.name.endsWith('.csv')) {
+      setError('Please upload a CSV file')
+      return
+    }
+
+    setIsUploading(true)
+    setProgress(0)
+    setError(null)
+    setAnalysis(null)
+
+    try {
+      // Simulate upload progress
+      const progressInterval = setInterval(() => {
+        setProgress((prev) => {
+          if (prev >= 90) {
+            clearInterval(progressInterval)
+            return 90
+          }
+          return prev + 10
+        })
+      }, 100)
+
+      const text = await file.text()
+      const analysisResult = await analyzeCSV(text)
+
+      clearInterval(progressInterval)
+      setProgress(100)
+      setAnalysis(analysisResult)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to process file')
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      'text/csv': ['.csv'],
+    },
+    multiple: false,
+    disabled: isUploading,
+  })
+
+  return (
+    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-3xl mx-auto">
+        <div className="text-center mb-8">
+          <FileText className="mx-auto h-12 w-12 text-gray-400" />
+          <h2 className="mt-2 text-3xl font-bold text-gray-900">CSV File Analyzer</h2>
+          <p className="mt-1 text-sm text-gray-500">Upload your CSV file to analyze its contents</p>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+
+        <div
+          {...getRootProps()}
+          className={`mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-lg ${
+            isDragActive ? 'border-blue-400 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
+          } ${isUploading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
         >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+          <div className="space-y-1 text-center">
+            <Upload className="mx-auto h-12 w-12 text-gray-400" aria-hidden="true" />
+            <div className="flex text-sm text-gray-600">
+              <input {...getInputProps()} />
+              <p className="pl-1">{isDragActive ? 'Drop the CSV file here' : 'Drag and drop your CSV file here, or click to select'}</p>
+            </div>
+            <p className="text-xs text-gray-500">CSV files only</p>
+          </div>
+        </div>
+
+        {isUploading && (
+          <div className="mt-4">
+            <Progress value={progress} className="w-full" />
+            <p className="mt-2 text-sm text-gray-500 text-center">Processing file... {progress}%</p>
+          </div>
+        )}
+
+        {error && (
+          <div className="mt-4 bg-red-50 border border-red-200 rounded-md p-4">
+            <div className="flex">
+              <AlertCircle className="h-5 w-5 text-red-400" aria-hidden="true" />
+              <p className="ml-3 text-sm text-red-500">{error}</p>
+            </div>
+          </div>
+        )}
+
+        {analysis && (
+          <div className="mt-8 bg-white shadow rounded-lg divide-y divide-gray-200">
+            <div className="px-4 py-5 sm:px-6">
+              <h3 className="text-lg font-medium text-gray-900">Analysis Results</h3>
+            </div>
+            <div className="px-4 py-5 sm:p-6">
+              <dl className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
+                <div>
+                  <dt className="text-sm font-medium text-gray-500">Total Rows</dt>
+                  <dd className="mt-1 text-sm text-gray-900">{analysis.totalRows}</dd>
+                </div>
+                <div>
+                  <dt className="text-sm font-medium text-gray-500">Number of Columns</dt>
+                  <dd className="mt-1 text-sm text-gray-900">{analysis.columns.length}</dd>
+                </div>
+                <div className="sm:col-span-2">
+                  <dt className="text-sm font-medium text-gray-500">Column Names</dt>
+                  <dd className="mt-1 text-sm text-gray-900">{analysis.columns.join(', ')}</dd>
+                </div>
+                <div className="sm:col-span-2">
+                  <dt className="text-sm font-medium text-gray-500">Sample Data (First 5 Rows)</dt>
+                  <dd className="mt-1 overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          {analysis.columns.map((column: string) => (
+                            <th key={column} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              {column}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {analysis.sampleData.map((row: any, index: number) => (
+                          <tr key={index}>
+                            {analysis.columns.map((column: string) => (
+                              <td key={column} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {row[column]}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
-  );
+  )
 }
