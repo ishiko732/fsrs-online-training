@@ -1,7 +1,6 @@
+import PostApp from '@api/controllers/posts'
 import { Hono } from 'hono'
 import { handle } from 'hono/vercel'
-
-import PostApp from '@/service/controllers/posts'
 
 export const runtime = 'edge'
 
