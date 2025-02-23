@@ -18,3 +18,25 @@ export interface ProgressValue {
   total: number
   percent: number
 }
+
+export interface ProgressStart {
+  tag: 'start'
+  wasmMemoryBuffer: ArrayBuffer
+  pointer: number
+}
+
+export interface ProgressFinish {
+  tag: 'finish'
+  parameters: Float32Array
+}
+
+export interface ProgressItem {
+  itemsProcessed: number
+  itemsTotal: number
+}
+
+interface Progress extends ProgressItem {
+  tag: 'progress'
+}
+
+export type ProgressState = Progress | ProgressStart | ProgressFinish

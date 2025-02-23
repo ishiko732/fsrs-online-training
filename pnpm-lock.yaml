@@ -23,6 +23,9 @@ importers:
       csv-parse:
         specifier: ^5.6.0
         version: 5.6.0
+      fsrs-browser:
+        specifier: ^2.0.4
+        version: 2.0.4
       fsrs-rs-nodejs:
         specifier: ^0.8.1
         version: 0.8.1
@@ -1004,6 +1007,9 @@ packages:
   for-each@0.3.5:
     resolution: {integrity: sha512-dKx12eRCVIzqCxFGplyFKJMPvLEWgmNtUrpTiJIR5u97zEhRG8ySrtboPHZXx7daLxQVrl643cTzbab2tkQjxg==}
     engines: {node: '>= 0.4'}
+
+  fsrs-browser@2.0.4:
+    resolution: {integrity: sha512-T5tnQtahUGHxBeKKLPBePasgm+gNxNGe1SlnXtB+Y7V0ZB3rPdNaSgBDzqL4VTB4a5VNRGvkIhcuLjiBqd46vA==}
 
   fsrs-rs-nodejs-android-arm-eabi@0.8.1:
     resolution: {integrity: sha512-AZp+yR67JU0lZAFx4jyNUbWbC7h8G1fM46aYetVswXYdxo3SiqliAE41DVwgbqxcPGnls9FST6r4Eg6oSLhd+Q==}
@@ -2877,6 +2883,8 @@ snapshots:
   for-each@0.3.5:
     dependencies:
       is-callable: 1.2.7
+
+  fsrs-browser@2.0.4: {}
 
   fsrs-rs-nodejs-android-arm-eabi@0.8.1:
     optional: true

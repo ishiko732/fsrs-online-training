@@ -2,18 +2,57 @@
 'use client'
 
 import { analyzeCSV } from '@api/services/collect'
+import { ProgressState } from '@api/services/types'
 import { Progress } from '@components/ui/progress'
-import { parse } from 'csv-parse/sync'
+import { getProgress } from 'fsrs-browser'
 import { AlertCircle, FileText, Upload } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 
 export default function Home() {
   const [progress, setProgress] = useState(0)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [analysis, setAnalysis] = useState<any>(null)
+  const [analysis, setAnalysis] = useState<Awaited<ReturnType<typeof analyzeCSV>> | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const workerRef = useRef<Worker>(undefined)
+  const timeIdRef = useRef<NodeJS.Timeout>(undefined)
+  const handleProgress = (wasmMemoryBuffer: ArrayBuffer, pointer: number) => {
+    const { itemsProcessed, itemsTotal } = getProgress(wasmMemoryBuffer, pointer)
+    setProgress((itemsProcessed / itemsTotal) * 100)
+    // if (progressTextRef.current) {
+    //   progressTextRef.current.innerText = `${itemsProcessed}/${itemsTotal}`
+    // }
+    console.log(itemsProcessed, itemsTotal)
+  }
+
+  useEffect(() => {
+    workerRef.current = new Worker(new URL('@api/services/worker.ts', import.meta.url))
+
+    workerRef.current.onmessage = (event: MessageEvent<number[] | ProgressState>) => {
+      console.log(event.data)
+      if ('tag' in event.data) {
+        // process ProgressState
+        const progressState = event.data as ProgressState
+        if (progressState.tag === 'start') {
+          const { wasmMemoryBuffer, pointer } = progressState
+          handleProgress(wasmMemoryBuffer, pointer)
+          timeIdRef.current = setInterval(() => {
+            handleProgress(wasmMemoryBuffer, pointer)
+          }, 100)
+        } else if (progressState.tag === 'finish') {
+          clearInterval(timeIdRef.current)
+          console.log('finish')
+        }
+      } else {
+        // process TrainResult
+        const trainResult = event.data
+        console.log(trainResult)
+      }
+    }
+    return () => {
+      workerRef.current?.terminate()
+    }
+  }, [])
 
   const onDrop = async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0]
@@ -43,6 +82,7 @@ export default function Home() {
 
       const text = await file.text()
       const analysisResult = await analyzeCSV(text)
+      workerRef.current?.postMessage({ items: analysisResult.fsrs_items, enableShortTerm: true })
 
       clearInterval(progressInterval)
       setProgress(100)
@@ -118,6 +158,14 @@ export default function Home() {
                 <div>
                   <dt className="text-sm font-medium text-gray-500">Number of Columns</dt>
                   <dd className="mt-1 text-sm text-gray-900">{analysis.columns.length}</dd>
+                </div>
+                <div>
+                  <dt className="text-sm font-medium text-gray-500">Number of Cards</dt>
+                  <dd className="mt-1 text-sm text-gray-900">{analysis.summary.grouped}</dd>
+                </div>
+                <div>
+                  <dt className="text-sm font-medium text-gray-500">Number of FSRSItems</dt>
+                  <dd className="mt-1 text-sm text-gray-900">{analysis.summary.fsrsItems}</dd>
                 </div>
                 <div className="sm:col-span-2">
                   <dt className="text-sm font-medium text-gray-500">Column Names</dt>

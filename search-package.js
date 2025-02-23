@@ -95,6 +95,7 @@ try {
   execSync(installCommand, { stdio: 'inherit' })
 
   console.log(`Successfully installed ${packageToInstall}`)
+  process.exit(0)
 } catch (error) {
   console.error(`Failed to install ${packageToInstall}:`, error)
   process.exit(1)
