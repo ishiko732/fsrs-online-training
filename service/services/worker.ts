@@ -29,7 +29,7 @@ async function initFSRS() {
       await initThreadPool(navigator.hardwareConcurrency)
     }
   } catch (e) {
-    self.postMessage({ error: `init failed error:${(e as Error).message}` })
+    self.postMessage({ tag: 'error', error: `init failed error:${(e as Error).message}` })
   }
 }
 

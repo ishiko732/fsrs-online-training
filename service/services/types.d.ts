@@ -44,4 +44,9 @@ interface InitdWorker {
   tag: 'initd'
 }
 
-export type ProgressState = Progress | ProgressStart | ProgressFinish | InitdWorker
+interface WorkerErrorInfo {
+  tag: 'error'
+  error: string
+}
+
+export type ProgressState = Progress | ProgressStart | ProgressFinish | InitdWorker | WorkerErrorInfo
