@@ -1,10 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 
-import { analyzeCSV } from '@api/services/collect'
+import { analyzeCSV, getProgress } from '@api/services/collect'
 import { ProgressState } from '@api/services/types'
 import { Progress } from '@components/ui/progress'
-import { getProgress } from 'fsrs-browser'
 import { AlertCircle, FileText, Upload } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
@@ -42,13 +41,15 @@ export default function Home() {
         } else if (progressState.tag === 'finish') {
           clearInterval(timeIdRef.current)
           console.log('finish')
+        } else if (progressState.tag === 'initd') {
+          console.log('initd')
+        } else {
+          console.error('Unknown progress state:', progressState)
         }
-      } else {
-        // process TrainResult
-        const trainResult = event.data
-        console.log(trainResult)
       }
     }
+
+    workerRef.current.postMessage({ init: true })
     return () => {
       workerRef.current?.terminate()
     }

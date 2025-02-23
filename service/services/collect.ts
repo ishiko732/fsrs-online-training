@@ -65,10 +65,19 @@ export const analyzeCSV = async (text: Buffer | string) => {
         grouped: Object.keys(cardIdHistory).length,
         fsrsItems: fsrs_items.length,
       },
-      fsrs_items
+      fsrs_items,
     }
   } catch (e) {
     const error = e as Error
     throw new Error(`Failed to parse CSV: ${error.message}`)
+  }
+}
+
+export function getProgress(wasmMemoryBuffer: ArrayBuffer, pointer: number) {
+  // The progress vec is length 2. Grep 2291AF52-BEE4-4D54-BAD0-6492DFE368D8
+  const progress = new Uint32Array(wasmMemoryBuffer, pointer, 2)
+  return {
+    itemsProcessed: progress[0],
+    itemsTotal: progress[1],
   }
 }

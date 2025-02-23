@@ -28,6 +28,7 @@ export interface ProgressStart {
 export interface ProgressFinish {
   tag: 'finish'
   parameters: Float32Array
+  enableShortTerm: boolean
 }
 
 export interface ProgressItem {
@@ -39,4 +40,8 @@ interface Progress extends ProgressItem {
   tag: 'progress'
 }
 
-export type ProgressState = Progress | ProgressStart | ProgressFinish
+interface InitdWorker {
+  tag: 'initd'
+}
+
+export type ProgressState = Progress | ProgressStart | ProgressFinish | InitdWorker
