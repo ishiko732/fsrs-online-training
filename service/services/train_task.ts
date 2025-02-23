@@ -1,4 +1,5 @@
 'use server'
+// tip: It cannot run on Vercel because it got optimized away.
 import { FSRS, FSRSItem, FSRSReview } from 'fsrs-rs-nodejs'
 
 import { FSRSItem as BasicFSRSItem, ProgressValue } from './types'
