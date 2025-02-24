@@ -74,6 +74,7 @@ export default function Home() {
 
   const merge_progress = +((progress_short + progress_long) / 2).toFixed(6) || 0
   const merge_train_time = +(Math.max(train_time_short, train_time_long)/1000).toFixed(3)
+  const offset_hour =Math.floor(get_timezone_offset(tz) / 60)
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto">
@@ -147,10 +148,10 @@ export default function Home() {
                 <div className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
                   <div>
                     <dt className="text-sm font-medium text-gray-500">Timezone</dt>
-                    <dd className="mt-1 text-sm text-gray-900">{`${tz} ( +${Math.floor(get_timezone_offset(tz) / 60)}h ) `}</dd>
+                    <dd className="mt-1 text-sm text-gray-900">{`${tz} ( ${offset_hour>0?`+${offset_hour}`:offset_hour===0?0:offset_hour}h ) `}</dd>
                   </div>
                   <div>
-                    <dt className="text-sm font-medium text-gray-500">NextDayAt</dt>
+                    <dt className="text-sm font-medium text-gray-500">Next Day Start At</dt>
                     <dd className="mt-1 text-sm text-gray-900">{nextDayStartAt}</dd>
                   </div>
                 </div>
