@@ -14,7 +14,9 @@ import { useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 
 export default function Home() {
+  const [draftTz, setDraftTz] = useState<string>(currentTz)
   const [tz, setTz] = useState<string>(currentTz)
+  const [draftNextDayStartAt, setDraftNextDayStartAt] = useState<number>(4)
   const [nextDayStartAt, setNextDayStartAt] = useState<number>(4)
   const [progress, setProgress] = useState(0)
   const [analysis, setAnalysis] = useState<Awaited<ReturnType<typeof analyzeCSV>> | null>(null)
@@ -51,6 +53,8 @@ export default function Home() {
 
     try {
       const text = await file.text()
+      setTz(draftTz)
+      setNextDayStartAt(draftNextDayStartAt)
       const analysisResult = await analyzeCSV(text, tz, nextDayStartAt)
       setProgress(90)
       train_short(analysisResult.fsrs_items)
@@ -73,8 +77,8 @@ export default function Home() {
   })
 
   const merge_progress = +((progress_short + progress_long) / 2).toFixed(6) || 0
-  const merge_train_time = +(Math.max(train_time_short, train_time_long)/1000).toFixed(3)
-  const offset_hour =Math.floor(get_timezone_offset(tz) / 60)
+  const merge_train_time = +(Math.max(train_time_short, train_time_long) / 1000).toFixed(3)
+  const offset_hour = Math.floor(get_timezone_offset(tz) / 60)
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto">
@@ -89,7 +93,7 @@ export default function Home() {
           <label htmlFor="timezone" className="text-sm font-medium text-gray-700">
             Timezone
           </label>
-          <TimezoneSelector tz={tz} setTz={setTz} />
+          <TimezoneSelector tz={draftTz} setTz={setDraftTz} />
         </div>
 
         {/* Next Day Start At Input */}
@@ -100,8 +104,8 @@ export default function Home() {
           <Input
             type="number"
             id="next-day-start-at"
-            value={nextDayStartAt}
-            onChange={(e) => setNextDayStartAt(+e.target.value)}
+            value={draftNextDayStartAt}
+            onChange={(e) => setDraftNextDayStartAt(+e.target.value)}
             step={1}
             min={0}
             max={23}
@@ -148,7 +152,7 @@ export default function Home() {
                 <div className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
                   <div>
                     <dt className="text-sm font-medium text-gray-500">Timezone</dt>
-                    <dd className="mt-1 text-sm text-gray-900">{`${tz} ( ${offset_hour>0?`+${offset_hour}`:offset_hour===0?0:offset_hour}h ) `}</dd>
+                    <dd className="mt-1 text-sm text-gray-900">{`${tz} ( ${offset_hour > 0 ? `+${offset_hour}` : offset_hour === 0 ? 0 : offset_hour}h ) `}</dd>
                   </div>
                   <div>
                     <dt className="text-sm font-medium text-gray-500">Next Day Start At</dt>
