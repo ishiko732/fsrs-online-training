@@ -80,6 +80,8 @@ export default function Home() {
           <h2 className="mt-2 text-3xl font-bold text-gray-900">CSV File Analyzer</h2>
           <p className="mt-1 text-sm text-gray-500">Upload your CSV file to analyze its contents and train</p>
         </div>
+
+        {/* Timezone */}
         <div className="mb-4 sm:flex justify-between sm:items-center">
           <label htmlFor="timezone" className="text-sm font-medium text-gray-700">
             Timezone
@@ -164,7 +166,7 @@ export default function Home() {
                   </dl>
                 </div>
 
-                <div className="px-4 py-5 sm:p-6 w-full">
+                <div className="py-5 w-full">
                   <dl className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
                     <div>
                       <dt className="text-sm font-medium text-gray-500">Train Model</dt>
