@@ -13,6 +13,8 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
   const workerRef = useRef<Worker>(undefined)
   const timeIdRef = useRef<NodeJS.Timeout>(undefined)
   const [params, setParams] = useState<number[]>([])
+  const startTime = useRef<DOMHighResTimeStamp>(0)
+  const [train_time, setTrain_time] = useState<DOMHighResTimeStamp>(0)
 
   const handleProgress = (wasmMemoryBuffer: ArrayBuffer, pointer: number) => {
     const { itemsProcessed, itemsTotal } = getProgress(wasmMemoryBuffer, pointer)
@@ -38,7 +40,7 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
           clearInterval(timeIdRef.current)
           setParams([...progressState.parameters])
           setIsTraining(false)
-
+          setTrain_time(performance.now() - startTime.current)
           console.log('finish')
         } else if (progressState.tag === 'initd') {
           console.log('initd')
@@ -68,6 +70,8 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
       setIsTraining(true)
       setProgress(0)
       setParams([])
+      setTrain_time(0)
+      startTime.current = performance.now()
       workerRef.current?.postMessage({ items, enableShortTerm })
     },
     [enableShortTerm],
@@ -83,5 +87,6 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
     progress,
     train,
     isDone,
+    train_time
   } as const
 }

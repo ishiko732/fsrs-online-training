@@ -25,6 +25,7 @@ export default function Home() {
     progress: progress_short,
     train: train_short,
     isDone: isDone_short,
+    train_time: train_time_short,
   } = useTrainFSRS({ enableShortTerm: true, setError })
   const {
     params: params_long,
@@ -32,6 +33,7 @@ export default function Home() {
     progress: progress_long,
     train: train_long,
     isDone: isDone_long,
+    train_time: train_time_long,
   } = useTrainFSRS({ enableShortTerm: false, setError })
 
   const onDrop = async (acceptedFiles: File[]) => {
@@ -71,7 +73,7 @@ export default function Home() {
   })
 
   const merge_progress = +((progress_short + progress_long) / 2).toFixed(6) || 0
-
+  const merge_train_time = +(Math.max(train_time_short, train_time_long)/1000).toFixed(3)
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto">
@@ -138,14 +140,14 @@ export default function Home() {
         {isDone_short() && isDone_long() && (
           <div className="mt-8 bg-white shadow rounded-lg divide-y divide-gray-200">
             <div className="px-4 py-5 sm:px-6">
-              <h3 className="text-lg font-medium text-gray-900">Train Results</h3>
+              <h3 className="text-lg font-medium text-gray-900">{`Train Results (${merge_train_time}s)`}</h3>
             </div>
             <div>
               <div className="px-4 py-5 sm:p-6">
                 <div className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
                   <div>
                     <dt className="text-sm font-medium text-gray-500">Timezone</dt>
-                    <dd className="mt-1 text-sm text-gray-900">{`${tz}(+${Math.floor(get_timezone_offset(tz) / 60)}h)`}</dd>
+                    <dd className="mt-1 text-sm text-gray-900">{`${tz} ( +${Math.floor(get_timezone_offset(tz) / 60)}h ) `}</dd>
                   </div>
                   <div>
                     <dt className="text-sm font-medium text-gray-500">NextDayAt</dt>
