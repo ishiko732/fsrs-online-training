@@ -1,3 +1,4 @@
+import { get_timezone_offset } from '@components/lib/tz'
 import { parse } from 'csv-parse/sync'
 
 import type { FSRSItem, FSRSReview, ParseData } from './types'
@@ -23,8 +24,10 @@ function dateDiffInDays(_a: number, _b: number) {
   return Math.floor((utc2 - utc1) / _MS_PER_DAY)
 }
 
-const convertToFSRSItem = (datum: ParseData[]): FSRSItem[] => {
-  const history = datum.map((data) => [convertTime(data.review_time, 8, 4), parseInt(data.review_rating)]).sort((a, b) => a[0] - b[0])
+const convertToFSRSItem = (offset_hour: number, next_day_start: number, datum: ParseData[]): FSRSItem[] => {
+  const history = datum
+    .map((data) => [convertTime(data.review_time, offset_hour/** TODO */, next_day_start), parseInt(data.review_rating)])
+    .sort((a, b) => a[0] - b[0])
 
   const reviews: FSRSReview[] = []
   let last_review_time = history[0][0]
@@ -43,7 +46,7 @@ const convertToFSRSItem = (datum: ParseData[]): FSRSItem[] => {
   return items.filter((item) => item.some((review) => review.deltaT > 0))
 }
 
-export const analyzeCSV = async (text: Buffer | string) => {
+export const analyzeCSV = async (text: Buffer | string, timezone: string, next_day_start: number) => {
   try {
     const records = <ParseData[]>parse(text, {
       delimiter: ',',
@@ -53,8 +56,10 @@ export const analyzeCSV = async (text: Buffer | string) => {
     })
     const columns = Object.keys(records[0] || {})
 
+    const offset_hour = Math.floor(get_timezone_offset(timezone) / 60)
+    console.log(`[timezone:${timezone}]offset_hour: ${offset_hour} next_day_start: ${next_day_start}`)
     const cardIdHistory = Object.groupBy(records, (record) => record.card_id) as Record<string, ParseData[]>
-    const fsrs_items = Object.values(cardIdHistory).flatMap(convertToFSRSItem)
+    const fsrs_items = Object.values(cardIdHistory).flatMap((item) => convertToFSRSItem(offset_hour, next_day_start, item))
     return {
       totalRows: records.length,
       columns: columns,

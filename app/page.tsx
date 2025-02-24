@@ -4,14 +4,18 @@ import { analyzeCSV } from '@api/services/collect'
 import AnalysisForm from '@components/Analysis'
 import CopyParams from '@components/CopyParams'
 import ErrorForm from '@components/Error'
-import FormatArray from '@components/FormatArray'
+import { currentTz, get_timezone_offset } from '@components/lib/tz'
+import TimezoneSelector from '@components/timezones'
+import { Input } from '@components/ui/input'
 import { Progress } from '@components/ui/progress'
 import useTrainFSRS from '@hooks/useTrain'
-import { AlertCircle, FileText, Upload } from 'lucide-react'
+import { FileText, Upload } from 'lucide-react'
 import { useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 
 export default function Home() {
+  const [tz, setTz] = useState<string>(currentTz)
+  const [nextDayStartAt, setNextDayStartAt] = useState<number>(4)
   const [progress, setProgress] = useState(0)
   const [analysis, setAnalysis] = useState<Awaited<ReturnType<typeof analyzeCSV>> | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -45,7 +49,7 @@ export default function Home() {
 
     try {
       const text = await file.text()
-      const analysisResult = await analyzeCSV(text)
+      const analysisResult = await analyzeCSV(text, tz, nextDayStartAt)
       setProgress(90)
       train_short(analysisResult.fsrs_items)
       train_long(analysisResult.fsrs_items)
@@ -66,7 +70,7 @@ export default function Home() {
     disabled: isTraining_short,
   })
 
-  const merge_progress = +((progress_short + progress_long) / 2).toFixed(6)
+  const merge_progress = +((progress_short + progress_long) / 2).toFixed(6) || 0
 
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -76,7 +80,29 @@ export default function Home() {
           <h2 className="mt-2 text-3xl font-bold text-gray-900">CSV File Analyzer</h2>
           <p className="mt-1 text-sm text-gray-500">Upload your CSV file to analyze its contents and train</p>
         </div>
+        <div className="mb-4 sm:flex justify-between sm:items-center">
+          <label htmlFor="timezone" className="text-sm font-medium text-gray-700">
+            Timezone
+          </label>
+          <TimezoneSelector tz={tz} setTz={setTz} />
+        </div>
 
+        {/* Next Day Start At Input */}
+        <div className="mb-4 sm:flex justify-between sm:items-center">
+          <label htmlFor="next-day-start-at" className="text-sm font-medium text-gray-700">
+            Next Day Start At
+          </label>
+          <Input
+            type="number"
+            id="next-day-start-at"
+            value={nextDayStartAt}
+            onChange={(e) => setNextDayStartAt(+e.target.value)}
+            step={1}
+            min={0}
+            max={23}
+            className="w-full mt-1 block sm:w-1/2 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+          />
+        </div>
         <div
           {...getRootProps()}
           className={`mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-lg ${
@@ -112,29 +138,43 @@ export default function Home() {
             <div className="px-4 py-5 sm:px-6">
               <h3 className="text-lg font-medium text-gray-900">Train Results</h3>
             </div>
-            <div className="sm:flex justify-between">
-              <div className="px-4 py-5 sm:p-6 w-full">
-                <dl className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
+            <div>
+              <div className="px-4 py-5 sm:p-6">
+                <div className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
                   <div>
-                    <dt className="text-sm font-medium text-gray-500">Train Model</dt>
-                    <dd className="mt-1 text-sm text-gray-900">Short-Term</dd>
+                    <dt className="text-sm font-medium text-gray-500">Timezone</dt>
+                    <dd className="mt-1 text-sm text-gray-900">{`${tz}(+${Math.floor(get_timezone_offset(tz) / 60)}h)`}</dd>
                   </div>
-                  <div className="sm:col-span-2 text-left">
-                    <CopyParams array={params_short} enable_short_term={true} />
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">NextDayAt</dt>
+                    <dd className="mt-1 text-sm text-gray-900">{nextDayStartAt}</dd>
                   </div>
-                </dl>
+                </div>
               </div>
+              <div className="sm:flex justify-between">
+                <div className="px-4 py-5 sm:p-6 w-full">
+                  <dl className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">Train Model</dt>
+                      <dd className="mt-1 text-sm text-gray-900">Short-Term</dd>
+                    </div>
+                    <div className="sm:col-span-2 text-left">
+                      <CopyParams array={params_short} enable_short_term={true} />
+                    </div>
+                  </dl>
+                </div>
 
-              <div className="px-4 py-5 sm:p-6 w-full">
-                <dl className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
-                  <div>
-                    <dt className="text-sm font-medium text-gray-500">Train Model</dt>
-                    <dd className="mt-1 text-sm text-gray-900">Long-Term</dd>
-                  </div>
-                  <div className="sm:col-span-2 text-left">
-                    <CopyParams array={params_long} enable_short_term={false} />
-                  </div>
-                </dl>
+                <div className="px-4 py-5 sm:p-6 w-full">
+                  <dl className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
+                    <div>
+                      <dt className="text-sm font-medium text-gray-500">Train Model</dt>
+                      <dd className="mt-1 text-sm text-gray-900">Long-Term</dd>
+                    </div>
+                    <div className="sm:col-span-2 text-left">
+                      <CopyParams array={params_long} enable_short_term={false} />
+                    </div>
+                  </dl>
+                </div>
               </div>
             </div>
           </div>
