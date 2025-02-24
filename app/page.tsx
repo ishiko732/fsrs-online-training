@@ -1,103 +1,31 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 
-import { analyzeCSV, getProgress } from '@api/services/collect'
-import { ProgressState } from '@api/services/types'
+import { analyzeCSV } from '@api/services/collect'
 import { Progress } from '@components/ui/progress'
+import useTrainFSRS from '@hooks/useTrain'
 import { AlertCircle, FileText, Upload } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 
 export default function Home() {
-  const [progress_short, setProgress_short] = useState(0)
-  const [progress_long, setProgress_long] = useState(0)
   const [analysis, setAnalysis] = useState<Awaited<ReturnType<typeof analyzeCSV>> | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [isTraining_short, setIsTraining_short] = useState(false)
-  const [isTraining_long, setIsTraining_long] = useState(false)
-  const workerRef_short = useRef<Worker>(undefined)
-  const workerRef_long = useRef<Worker>(undefined)
-  const timeIdRef_short = useRef<NodeJS.Timeout>(undefined)
-  const timeIdRef_long = useRef<NodeJS.Timeout>(undefined)
-  const [params_short, setParam_short] = useState<number[]>([])
-  const [params_long, setParam_long] = useState<number[]>([])
-  const handleProgress = (wasmMemoryBuffer: ArrayBuffer, pointer: number, enableShortTerm: boolean) => {
-    const { itemsProcessed, itemsTotal } = getProgress(wasmMemoryBuffer, pointer)
-    const value = (itemsProcessed / itemsTotal) * 100
 
-    if (enableShortTerm) {
-      setProgress_short(value)
-    } else {
-      setProgress_long(value)
-    }
-    // if (progressTextRef.current) {
-    //   progressTextRef.current.innerText = `${itemsProcessed}/${itemsTotal}`
-    // }
-    console.log(enableShortTerm, itemsProcessed, itemsTotal)
-  }
-
-  useEffect(() => {
-    const handlerMessage = (event: MessageEvent<number[] | ProgressState>, enableShortTerm: boolean) => {
-      console.log(event.data)
-      if ('tag' in event.data) {
-        // process ProgressState
-        const progressState = event.data as ProgressState
-        if (progressState.tag === 'start') {
-          const { wasmMemoryBuffer, pointer } = progressState
-          handleProgress(wasmMemoryBuffer, pointer, enableShortTerm)
-
-          const timeId = setInterval(() => {
-            handleProgress(wasmMemoryBuffer, pointer, enableShortTerm)
-          }, 100)
-          if (enableShortTerm) {
-            timeIdRef_short.current = timeId
-          } else {
-            timeIdRef_long.current = timeId
-          }
-        } else if (progressState.tag === 'finish') {
-          if (enableShortTerm) {
-            clearInterval(timeIdRef_short.current)
-            setParam_short([...progressState.parameters])
-            setIsTraining_short(false)
-          } else {
-            clearInterval(timeIdRef_long.current)
-            setParam_long([...progressState.parameters])
-            setIsTraining_long(false)
-          }
-
-          console.log('finish')
-        } else if (progressState.tag === 'initd') {
-          console.log('initd')
-        } else if (progressState.tag === 'error') {
-          setError(progressState.error)
-          console.error('Unknown progress state:', progressState)
-        }
-      }
-    }
-    workerRef_short.current = new Worker(new URL('@api/services/worker.ts', import.meta.url))
-
-    workerRef_short.current.onmessage = (event: MessageEvent<number[] | ProgressState>) => {
-      handlerMessage(event, true)
-    }
-    workerRef_short.current.onerror = (err) => {
-      setError(err.message)
-    }
-    workerRef_short.current.postMessage({ init: true })
-
-    workerRef_long.current = new Worker(new URL('@api/services/worker.ts', import.meta.url))
-    workerRef_long.current.onmessage = (event: MessageEvent<number[] | ProgressState>) => {
-      handlerMessage(event, false)
-    }
-    workerRef_long.current.onerror = (err) => {
-      setError(err.message)
-    }
-    workerRef_long.current.postMessage({ init: true })
-
-    return () => {
-      workerRef_short.current?.terminate()
-      workerRef_long.current?.terminate()
-    }
-  }, [])
+  const {
+    params: params_short,
+    isTraining: isTraining_short,
+    progress: progress_short,
+    train: train_short,
+    isDone: isDone_short,
+  } = useTrainFSRS({ enableShortTerm: true, setError })
+  const {
+    params: params_long,
+    isTraining: isTraining_long,
+    progress: progress_long,
+    train: train_long,
+    isDone: isDone_long,
+  } = useTrainFSRS({ enableShortTerm: false, setError })
 
   const onDrop = async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0]
@@ -108,25 +36,17 @@ export default function Home() {
       return
     }
 
-    setIsTraining_short(true)
-    setIsTraining_long(true)
-    setProgress_short(0)
-    setProgress_long(0)
-    setParam_short([])
-    setParam_long([])
     setError(null)
     setAnalysis(null)
 
     try {
       const text = await file.text()
       const analysisResult = await analyzeCSV(text)
-      workerRef_short.current?.postMessage({ items: analysisResult.fsrs_items, enableShortTerm: true })
-      workerRef_long.current?.postMessage({ items: analysisResult.fsrs_items, enableShortTerm: false })
+      train_short(analysisResult.fsrs_items)
+      train_long(analysisResult.fsrs_items)
       setAnalysis(analysisResult)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to process file')
-      setIsTraining_short(false)
-      setIsTraining_long(false)
     }
   }
 
@@ -145,7 +65,7 @@ export default function Home() {
         <div className="text-center mb-8">
           <FileText className="mx-auto h-12 w-12 text-gray-400" />
           <h2 className="mt-2 text-3xl font-bold text-gray-900">CSV File Analyzer</h2>
-          <p className="mt-1 text-sm text-gray-500">Upload your CSV file to analyze its contents</p>
+          <p className="mt-1 text-sm text-gray-500">Upload your CSV file to analyze its contents and train</p>
         </div>
 
         <div
@@ -160,7 +80,15 @@ export default function Home() {
               <input {...getInputProps()} />
               <p className="pl-1">{isDragActive ? 'Drop the CSV file here' : 'Drag and drop your CSV file here, or click to select'}</p>
             </div>
-            <p className="text-xs text-gray-500">CSV files only</p>
+            <p className="text-xs text-gray-500 text-left">CSV files only</p>
+            <div>
+              <span className="text-gray-500 text-left">require fields:</span>
+              <ul className="list-disc pl-4 pt-2 text-gray-500 text-left">
+                <li>card_id(integer or string)</li>
+                <li>review_time(integer)</li>
+                <li>review_rating([0,4])</li>
+              </ul>
+            </div>
           </div>
         </div>
 
@@ -257,7 +185,7 @@ export default function Home() {
                   <dd className="mt-1 text-sm text-gray-900">Short-Term</dd>
                 </div>
                 <div className="sm:col-span-2">
-                  <dt className="text-sm font-medium text-gray-500">Parameter</dt>
+                  <dt className="text-sm font-medium text-gray-500">Optimized Parameters</dt>
                   <dd className="mt-1 text-sm text-gray-900">{JSON.stringify(params_short, null, 2)}</dd>
                 </div>
               </dl>
@@ -283,7 +211,7 @@ export default function Home() {
                   <dd className="mt-1 text-sm text-gray-900">Long-Term</dd>
                 </div>
                 <div className="sm:col-span-2">
-                  <dt className="text-sm font-medium text-gray-500">Parameter</dt>
+                  <dt className="text-sm font-medium text-gray-500">Optimized Parameters</dt>
                   <dd className="mt-1 text-sm text-gray-900">{JSON.stringify(params_long, null, 2)}</dd>
                 </div>
               </dl>
