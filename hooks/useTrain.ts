@@ -17,7 +17,7 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
   const handleProgress = (wasmMemoryBuffer: ArrayBuffer, pointer: number) => {
     const { itemsProcessed, itemsTotal } = getProgress(wasmMemoryBuffer, pointer)
     const value = (itemsProcessed / itemsTotal) * 100
-    setProgress(value)
+    setProgress(value || 0)
   }
 
   useEffect(() => {
