@@ -11,6 +11,7 @@ export default function AnalysisForm({
   if (!analysis) {
     return <></>
   }
+  const cost_time = +(analysis.summary.cost_time / 1000).toFixed(3)
   return (
     <>
       {progress > 0 && analysis === null && (
@@ -22,7 +23,7 @@ export default function AnalysisForm({
 
       <div className="mt-8 bg-white shadow rounded-lg divide-y divide-gray-200">
         <div className="px-4 py-5 sm:px-6">
-          <h3 className="text-lg font-medium text-gray-900">Analysis Results</h3>
+          <h3 className="text-lg font-medium text-gray-900">{`Analysis Results (${cost_time}s)`}</h3>
         </div>
         <div className="px-4 py-5 sm:p-6">
           <dl className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">

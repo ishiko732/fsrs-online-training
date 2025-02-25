@@ -52,6 +52,7 @@ export const analyze = async (file: File, timezone: string, next_day_start: numb
   const sampleData: ParseData[] = []
   let rows = 0
 
+  const start = performance.now()
   const offset_hour = Math.floor(get_timezone_offset(timezone) / 60)
   console.log(`[timezone:${timezone}]offset_hour: ${offset_hour} next_day_start: ${next_day_start}`)
   console.log(`signal is ${typeof signal === 'function' ? 'enabled' : 'disabled'}`)
@@ -90,7 +91,7 @@ export const analyze = async (file: File, timezone: string, next_day_start: numb
         const fields = Object.keys(sampleData[0]) ?? []
         const fsrs_items: FSRSItem[] = Array.from(map.values())
           .flatMap((item) => convertToFSRSItem(offset_hour, next_day_start, item))
-
+        const cost_time = performance.now() - start
         resolve({
           fields: fields,
           sampleData: sampleData,
@@ -99,6 +100,7 @@ export const analyze = async (file: File, timezone: string, next_day_start: numb
             columnCount: fields.length,
             grouped: map.size,
             fsrsItems: fsrs_items.length,
+            cost_time: cost_time,
           },
           fsrs_items,
         })

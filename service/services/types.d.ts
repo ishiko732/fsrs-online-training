@@ -14,6 +14,7 @@ export interface AnalyzeCSVResult {
     columnCount: number,
     grouped: number,
     fsrsItems: number,
+    cost_time: number
   },
   fsrs_items: FSRSItem[]
 }
