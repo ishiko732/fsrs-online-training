@@ -12,12 +12,21 @@ export type TimezoneSelectorProps = { tz: string; setTz: (tz: string) => void; c
 
 export default function TimezoneSelector({ tz, setTz, className }: TimezoneSelectorProps) {
   const [open, setOpen] = useState(false)
-
+  const handleClick = (tz: string) => {
+    setTz(tz)
+    setOpen(false)
+  }
   return (
     <>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button variant="outline" role="combobox" aria-expanded={open} className="w-full sm:w-1/2 justify-between" aria-label="Select TimeZone">
+          <Button
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            className="w-full sm:w-1/2 justify-between"
+            aria-label="Select TimeZone"
+          >
             {tz || 'Select TimeZone...'}
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
@@ -33,7 +42,7 @@ export default function TimezoneSelector({ tz, setTz, className }: TimezoneSelec
                   <CommandItem
                     key={index}
                     value={timezone}
-                    onSelect={() => setTz(timezone)}
+                    onSelect={handleClick}
                     aria-label={timezone}
                     role="select"
                     className={'w-full'}
