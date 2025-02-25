@@ -54,6 +54,7 @@ export const analyze = async (file: File, timezone: string, next_day_start: numb
 
   const offset_hour = Math.floor(get_timezone_offset(timezone) / 60)
   console.log(`[timezone:${timezone}]offset_hour: ${offset_hour} next_day_start: ${next_day_start}`)
+  console.log(`signal is ${typeof signal === 'function' ? 'enabled' : 'disabled'}`)
   return new Promise<AnalyzeCSVResult>((resolve, reject) => {
     Papa.parse<ParseData>(file, {
       header: true,
@@ -62,7 +63,7 @@ export const analyze = async (file: File, timezone: string, next_day_start: numb
       delimiter: ',',
       dynamicTyping: true,
       fastMode: true,
-      step: async (result) => {
+      step: (result) => {
         const card_id = result.data.card_id
         if (typeof card_id === 'undefined' || card_id === null) {
           return
@@ -78,7 +79,8 @@ export const analyze = async (file: File, timezone: string, next_day_start: numb
           sampleData.push(result.data)
         }
 
-        if (signal && rows % 500 /** 500row */ === 0) {
+        if (typeof signal === 'function' && rows % 500 /** 500row */ === 0) {
+          console.debug(`[analyze] row: ${rows}`)
           requestAnimationFrame(() => {
             signal(rows)
           })

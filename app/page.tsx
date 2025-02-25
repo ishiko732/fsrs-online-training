@@ -52,19 +52,13 @@ export default function Home() {
     setError(null)
     setAnalysis(null)
     setProgressInfo(0)
-
-    try {
-      setTz(draftTz)
-      setNextDayStartAt(draftNextDayStartAt)
-      const analysisResult = await analyzeCSV(file, tz, nextDayStartAt)
-      train_short(analysisResult.fsrs_items)
-      train_long(analysisResult.fsrs_items)
-      setAnalysis(analysisResult)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to process file')
-    } finally {
-      setProgressInfo(0)
-    }
+    setTz(draftTz)
+    setNextDayStartAt(draftNextDayStartAt)
+    const analysisResult = await analyzeCSV(file, draftTz, draftNextDayStartAt)
+    train_short(analysisResult.fsrs_items)
+    train_long(analysisResult.fsrs_items)
+    setAnalysis(analysisResult)
+    setProgressInfo(0)
   }
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
