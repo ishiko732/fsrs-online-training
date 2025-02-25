@@ -1,6 +1,7 @@
 'use client'
 import { cn } from '@lib/utils'
 import { useState } from 'react'
+import { toast } from 'sonner'
 
 import FormatArray from './FormatArray'
 
@@ -17,9 +18,14 @@ export default function CopyParams<T>({
 
   const handleCopy = () => {
     const textToCopy = array.join(', ') // 将整个数组合并为一个字符串
-    navigator.clipboard.writeText(textToCopy).then(() => {
-      setIsCopied(true)
-      setTimeout(() => setIsCopied(false), 2000) // 重置动画状态，2秒后恢复
+    toast.promise(navigator.clipboard.writeText(textToCopy), {
+      loading: 'Copying...',
+      success: () => {
+        setIsCopied(true)
+        setTimeout(() => setIsCopied(false), 2000) // 重置动画状态，2秒后恢复
+        return 'Copied!'
+      },
+      error: 'Failed to copy',
     })
   }
   return (

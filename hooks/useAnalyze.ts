@@ -15,6 +15,5 @@ export default function useAnalyze({ setError, setProgressInfo }: AnalyzeProps) 
             throw new Error(msg)
         })
     }
-
     return handlerCSV
 }

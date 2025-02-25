@@ -2,7 +2,9 @@
 
 import AnalysisForm from '@components/Analysis'
 import CopyParams from '@components/CopyParams'
+import DemoCSV from '@components/Demo-csv'
 import ErrorForm from '@components/Error'
+import { Sleep } from '@components/lib/time'
 import { currentTz, get_timezone_offset } from '@components/lib/tz'
 import TimezoneSelector from '@components/timezones'
 import { Input } from '@components/ui/input'
@@ -10,8 +12,9 @@ import { Progress } from '@components/ui/progress'
 import useAnalyze from '@hooks/useAnalyze'
 import useTrainFSRS from '@hooks/useTrain'
 import { FileText, Upload } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
+import { toast } from 'sonner'
 
 export default function Home() {
   const [draftTz, setDraftTz] = useState<string>(currentTz)
@@ -54,10 +57,23 @@ export default function Home() {
     setProgressInfo(0)
     setTz(draftTz)
     setNextDayStartAt(draftNextDayStartAt)
-    const analysisResult = await analyzeCSV(file, draftTz, draftNextDayStartAt)
-    train_short(analysisResult.fsrs_items)
-    train_long(analysisResult.fsrs_items)
-    setAnalysis(analysisResult)
+    const analysisResult = analyzeCSV(file, draftTz, draftNextDayStartAt)
+
+    toast.promise(analysisResult, {
+      loading: 'Analyzing CSV...',
+      success: (analysisResult) => {
+        toast.promise(Sleep(2000), {
+          loading: 'Training...',
+        })
+        train_short(analysisResult.fsrs_items)
+        train_long(analysisResult.fsrs_items)
+        setAnalysis(analysisResult)
+        return `Analysis completed`
+      },
+      error: () => {
+        return 'Failed to analyze CSV'
+      },
+    })
     setProgressInfo(0)
   }
 
@@ -69,6 +85,13 @@ export default function Home() {
     multiple: false,
     disabled: isTraining_short,
   })
+
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      toast('Welcome to FSRS online training', { duration: 10000 })
+      toast(<DemoCSV />, { duration: 60000 })
+    })
+  }, [])
 
   const merge_progress = +((progress_short + progress_long) / 2).toFixed(6) || 0
   const merge_train_time = +(Math.max(train_time_short, train_time_long) / 1000).toFixed(3)
