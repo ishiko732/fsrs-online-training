@@ -1,5 +1,5 @@
 import { analyzeCSV } from '@api/services/collect'
-import { Progress } from '@components/ui/progress'
+import { LoadingSpinner } from '@components/ui/loadingSpinner'
 
 export default function AnalysisForm({
   progress,
@@ -13,10 +13,10 @@ export default function AnalysisForm({
   }
   return (
     <>
-      {progress > 0 && progress < 100 && (
+      {progress > 0 && analysis === null && (
         <div className="mt-4">
-          <Progress value={progress} className="w-full" />
-          <p className="mt-2 text-sm text-gray-500 text-center">Processing file... {progress}%</p>
+          <LoadingSpinner className="w-full" />
+          <p className="mt-2 text-sm text-gray-500 text-center">{`Processing line ${progress} of the file`}</p>
         </div>
       )}
 
@@ -28,11 +28,11 @@ export default function AnalysisForm({
           <dl className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2">
             <div>
               <dt className="text-sm font-medium text-gray-500">Total Rows</dt>
-              <dd className="mt-1 text-sm text-gray-900">{analysis.totalRows}</dd>
+              <dd className="mt-1 text-sm text-gray-900">{analysis.summary.rowCount}</dd>
             </div>
             <div>
               <dt className="text-sm font-medium text-gray-500">Number of Columns</dt>
-              <dd className="mt-1 text-sm text-gray-900">{analysis.columns.length}</dd>
+              <dd className="mt-1 text-sm text-gray-900">{analysis.fields.length}</dd>
             </div>
             <div>
               <dt className="text-sm font-medium text-gray-500">Number of Cards</dt>
@@ -44,7 +44,7 @@ export default function AnalysisForm({
             </div>
             <div className="sm:col-span-2">
               <dt className="text-sm font-medium text-gray-500">Column Names</dt>
-              <dd className="mt-1 text-sm text-gray-900">{analysis.columns.join(', ')}</dd>
+              <dd className="mt-1 text-sm text-gray-900">{analysis.fields.join(', ')}</dd>
             </div>
             <div className="sm:col-span-2">
               <dt className="text-sm font-medium text-gray-500">Sample Data (First 5 Rows)</dt>
@@ -52,7 +52,7 @@ export default function AnalysisForm({
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      {analysis.columns.map((column: string) => (
+                      {analysis.fields.map((column: string) => (
                         <th key={column} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           {column}
                         </th>
@@ -63,7 +63,7 @@ export default function AnalysisForm({
                     {/* eslint-disable @typescript-eslint/no-explicit-any */}
                     {analysis.sampleData.map((row: any, index: number) => (
                       <tr key={index}>
-                        {analysis.columns.map((column: string) => (
+                        {analysis.fields.map((column: string) => (
                           <td key={column} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {row[column]}
                           </td>

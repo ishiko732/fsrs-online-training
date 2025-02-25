@@ -1,6 +1,5 @@
 'use client'
 
-import { analyzeCSV } from '@api/services/collect'
 import AnalysisForm from '@components/Analysis'
 import CopyParams from '@components/CopyParams'
 import ErrorForm from '@components/Error'
@@ -8,6 +7,7 @@ import { currentTz, get_timezone_offset } from '@components/lib/tz'
 import TimezoneSelector from '@components/timezones'
 import { Input } from '@components/ui/input'
 import { Progress } from '@components/ui/progress'
+import useAnalyze from '@hooks/useAnalyze'
 import useTrainFSRS from '@hooks/useTrain'
 import { FileText, Upload } from 'lucide-react'
 import { useState } from 'react'
@@ -18,7 +18,7 @@ export default function Home() {
   const [tz, setTz] = useState<string>(currentTz)
   const [draftNextDayStartAt, setDraftNextDayStartAt] = useState<number>(4)
   const [nextDayStartAt, setNextDayStartAt] = useState<number>(4)
-  const [progress, setProgress] = useState(0)
+  const [progressInfo, setProgressInfo] = useState(0)
   const [analysis, setAnalysis] = useState<Awaited<ReturnType<typeof analyzeCSV>> | null>(null)
   const [error, setError] = useState<string | null>(null)
   const {
@@ -38,6 +38,8 @@ export default function Home() {
     train_time: train_time_long,
   } = useTrainFSRS({ enableShortTerm: false, setError })
 
+  const analyzeCSV = useAnalyze({ setError, setProgressInfo })
+
   const onDrop = async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0]
     if (!file) return
@@ -49,21 +51,19 @@ export default function Home() {
 
     setError(null)
     setAnalysis(null)
-    setProgress(0)
+    setProgressInfo(0)
 
     try {
-      const text = await file.text()
       setTz(draftTz)
       setNextDayStartAt(draftNextDayStartAt)
-      const analysisResult = await analyzeCSV(text, tz, nextDayStartAt)
-      setProgress(90)
+      const analysisResult = await analyzeCSV(file, tz, nextDayStartAt)
       train_short(analysisResult.fsrs_items)
       train_long(analysisResult.fsrs_items)
       setAnalysis(analysisResult)
-      setProgress(100)
     } catch (err) {
-      setProgress(100)
       setError(err instanceof Error ? err.message : 'Failed to process file')
+    } finally {
+      setProgressInfo(0)
     }
   }
 
@@ -190,7 +190,7 @@ export default function Home() {
         )}
         <ErrorForm error={error} />
 
-        <AnalysisForm analysis={analysis} progress={progress} />
+        <AnalysisForm analysis={analysis} progress={progressInfo} />
       </div>
     </div>
   )

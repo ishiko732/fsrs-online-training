@@ -1,7 +1,7 @@
 import { get_timezone_offset } from '@components/lib/tz'
-import { parse } from 'csv-parse/sync'
+import Papa from 'papaparse';
 
-import type { FSRSItem, FSRSReview, ParseData } from './types'
+import type { AnalyzeCSVResult, FSRSItem, FSRSReview, ParseData } from './types'
 
 const _MS_PER_HOUR = 1000 * 60 * 60
 const _MS_PER_DAY = _MS_PER_HOUR * 24
@@ -24,7 +24,7 @@ function dateDiffInDays(_a: number, _b: number) {
   return Math.floor((utc2 - utc1) / _MS_PER_DAY)
 }
 
-const convertToFSRSItem = (offset_hour: number, next_day_start: number, datum: ParseData[]): FSRSItem[] => {
+export const convertToFSRSItem = (offset_hour: number, next_day_start: number, datum: ParseData[]): FSRSItem[] => {
   const history = datum
     .map((data) => [convertTime(data.review_time, offset_hour/** TODO */, next_day_start), parseInt(data.review_rating)])
     .sort((a, b) => a[0] - b[0])
@@ -46,32 +46,71 @@ const convertToFSRSItem = (offset_hour: number, next_day_start: number, datum: P
   return items.filter((item) => item.some((review) => review.deltaT > 0))
 }
 
-export const analyzeCSV = async (text: Buffer | string, timezone: string, next_day_start: number) => {
-  try {
-    const records = <ParseData[]>parse(text, {
-      delimiter: ',',
-      columns: true,
-      skip_empty_lines: true,
-      trim: true,
-    })
-    const columns = Object.keys(records[0] || {})
+export const analyze = async (file: File, timezone: string, next_day_start: number, signal?: (row: number) => void) => {
+  // init
+  const map = new Map<string | number, ParseData[]>()
+  const sampleData: ParseData[] = []
+  let rows = 0
 
-    const offset_hour = Math.floor(get_timezone_offset(timezone) / 60)
-    console.log(`[timezone:${timezone}]offset_hour: ${offset_hour} next_day_start: ${next_day_start}`)
-    const cardIdHistory = Object.groupBy(records, (record) => record.card_id) as Record<string, ParseData[]>
-    const fsrs_items = Object.values(cardIdHistory).flatMap((item) => convertToFSRSItem(offset_hour, next_day_start, item))
-    return {
-      totalRows: records.length,
-      columns: columns,
-      sampleData: records.slice(0, 5),
-      summary: {
-        rowCount: records.length,
-        columnCount: columns.length,
-        grouped: Object.keys(cardIdHistory).length,
-        fsrsItems: fsrs_items.length,
+  const offset_hour = Math.floor(get_timezone_offset(timezone) / 60)
+  console.log(`[timezone:${timezone}]offset_hour: ${offset_hour} next_day_start: ${next_day_start}`)
+  return new Promise<AnalyzeCSVResult>((resolve, reject) => {
+    Papa.parse<ParseData>(file, {
+      header: true,
+      worker: true,
+      skipEmptyLines: true,
+      delimiter: ',',
+      dynamicTyping: true,
+      fastMode: true,
+      step: async (result) => {
+        const card_id = result.data.card_id
+        if (typeof card_id === 'undefined' || card_id === null) {
+          return
+        }
+        if (!map.has(card_id)) {
+          map.set(card_id, [])
+        }
+
+        // group by card_id
+        map.get(card_id)?.push(result.data)
+        rows++
+        if (rows <= 5) {
+          sampleData.push(result.data)
+        }
+
+        if (signal && rows % 500 /** 500row */ === 0) {
+          requestAnimationFrame(() => {
+            signal(rows)
+          })
+        }
       },
-      fsrs_items,
-    }
+      complete: () => {
+        const fields = Object.keys(sampleData[0]) ?? []
+        const fsrs_items: FSRSItem[] = Array.from(map.values())
+          .flatMap((item) => convertToFSRSItem(offset_hour, next_day_start, item))
+
+        resolve({
+          fields: fields,
+          sampleData: sampleData,
+          summary: {
+            rowCount: rows,
+            columnCount: fields.length,
+            grouped: map.size,
+            fsrsItems: fsrs_items.length,
+          },
+          fsrs_items,
+        })
+      },
+      error: (err) => {
+        reject(err)
+      },
+    });
+  });
+}
+
+export const analyzeCSV = async (file: File, timezone: string, next_day_start: number) => {
+  try {
+    return await analyze(file, timezone, next_day_start)
   } catch (e) {
     const error = e as Error
     throw new Error(`Failed to parse CSV: ${error.message}`)

@@ -6,6 +6,18 @@ export interface ParseData {
   review_state: string
 }
 
+export interface AnalyzeCSVResult {
+  fields: string[],
+  sampleData: ParseData[],
+  summary: {
+    rowCount: number,
+    columnCount: number,
+    grouped: number,
+    fsrsItems: number,
+  },
+  fsrs_items: FSRSItem[]
+}
+
 export interface FSRSReview {
   rating: number
   deltaT: number
