@@ -77,6 +77,9 @@ importers:
       tailwindcss-animate:
         specifier: ^1.0.7
         version: 1.0.7(tailwindcss@4.0.8)
+      ts-fsrs:
+        specifier: ^4.x
+        version: 4.6.1
       zod:
         specifier: ^3.24.2
         version: 3.24.2
@@ -2306,6 +2309,10 @@ packages:
     engines: {node: '>=18.12'}
     peerDependencies:
       typescript: '>=4.8.4'
+
+  ts-fsrs@4.6.1:
+    resolution: {integrity: sha512-Etf4uHPpiY9I//T1QmH6AO25xo1orcFOh/chl5bDFbHR5Wyh4JK3wSbvR15iMgPg7B13DFyrSIY8/MwZnGlOng==}
+    engines: {node: '>=18.0.0'}
 
   tsconfig-paths@3.15.0:
     resolution: {integrity: sha512-2Ac2RgzDe/cn48GvOe3M+o82pEFewD3UPbyoUHHdKasHwJKjds4fLXWf/Ux5kATBKN20oaFGu+jbElp1pos0mg==}
@@ -4692,6 +4699,8 @@ snapshots:
   ts-api-utils@2.0.1(typescript@5.7.3):
     dependencies:
       typescript: 5.7.3
+
+  ts-fsrs@4.6.1: {}
 
   tsconfig-paths@3.15.0:
     dependencies:

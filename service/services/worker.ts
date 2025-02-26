@@ -1,5 +1,6 @@
 import { base64ToArrayBuffer, fsrsBrowserWasmBase64 } from '@api/services/wasm'
 import init, { Fsrs, InitOutput, initThreadPool, Progress } from 'fsrs-browser/fsrs_browser'
+import { default_w } from 'ts-fsrs'
 
 import { FSRSItem, ProgressFinish, ProgressStart } from './types'
 
@@ -39,7 +40,7 @@ export async function computeParameters(items: FSRSItem[], enableShortTerm: bool
   const ratings = new Uint32Array(items.flatMap((item) => item.map((review) => review.rating)))
   const deltaTs = new Uint32Array(items.flatMap((item) => item.map((review) => review.deltaT)))
   const lengths = new Uint32Array(items.map((item) => item.length))
-  const fsrs = new Fsrs()
+  const fsrs = new Fsrs(Float32Array.from(default_w))
   progress = Progress.new()
   // must set next.config.js
   // https://vercel.com/docs/projects/project-configuration#headers
@@ -55,8 +56,6 @@ export async function computeParameters(items: FSRSItem[], enableShortTerm: bool
     parameters,
     enableShortTerm,
   } satisfies ProgressFinish)
-  fsrs.free()
   progress = null
-  // container = null;
   return parameters
 }
