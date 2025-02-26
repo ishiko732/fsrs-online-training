@@ -1,5 +1,6 @@
 import { getProgress } from '@api/services/collect'
 import type { FSRSItem, ProgressState } from '@api/services/types'
+import * as Sentry from '@sentry/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 export type TrainFSRSProps = {
@@ -46,6 +47,9 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
           console.log('initd')
         } else if (progressState.tag === 'error') {
           setError(progressState.error)
+          const error = new Error(progressState.error)
+          error.name = 'WorkerError'
+          Sentry.captureException(error)
           console.error('Unknown progress state:', progressState)
         }
       }
@@ -56,6 +60,7 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
       handlerMessage(event)
     }
     workerRef.current.onerror = (err) => {
+      Sentry.captureException(err)
       setError(err.message)
     }
     workerRef.current.postMessage({ init: true })
@@ -87,6 +92,6 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
     progress,
     train,
     isDone,
-    train_time
+    train_time,
   } as const
 }
