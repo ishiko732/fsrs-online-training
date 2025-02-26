@@ -138,7 +138,16 @@ export default function Home() {
           <div className="space-y-1 text-center">
             <Upload className="mx-auto h-12 w-12 text-gray-400" aria-hidden="true" />
             <div className="flex text-sm text-gray-600">
-              <input {...getInputProps()} />
+              <input
+                {...getInputProps({
+                  style: {
+                    opacity: 0.01,
+                    width: 0,
+                    height: 0,
+                    display: 'none',
+                  },
+                })}
+              />
               <p className="pl-1">{isDragActive ? 'Drop the CSV file here' : 'Drag and drop your CSV file here, or click to select'}</p>
             </div>
             <p className="text-xs text-gray-500 text-left">CSV files only</p>
