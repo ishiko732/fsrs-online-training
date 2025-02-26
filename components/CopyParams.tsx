@@ -5,12 +5,12 @@ import { toast } from 'sonner'
 
 import FormatArray from './FormatArray'
 
-export default function CopyParams<T>({
+export default function CopyParams({
   array,
   enable_short_term,
   className,
 }: {
-  array: T[]
+  array: number[]
   enable_short_term: boolean
   className?: string
 }) {
@@ -28,7 +28,7 @@ export default function CopyParams<T>({
             <p>
               {`You can open the visualizer through this link: `}
               <a
-                href={`https://open-spaced-repetition.github.io/anki_fsrs_visualizer/?w=${textToCopy}&m=${0.9}&e=${enable_short_term ? 1 : 0}`}
+                href={`https://open-spaced-repetition.github.io/anki_fsrs_visualizer/?w=${array.map((a) => a.toFixed(4)).join(',')}&m=${0.9}&e=${enable_short_term ? 1 : 0}`}
                 className="text-blue-500 underline"
                 target="_blank"
               >
