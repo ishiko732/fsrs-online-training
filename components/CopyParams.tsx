@@ -17,12 +17,27 @@ export default function CopyParams<T>({
   const [isCopied, setIsCopied] = useState(false)
 
   const handleCopy = () => {
-    const textToCopy = array.join(', ') // 将整个数组合并为一个字符串
+    const textToCopy = array.join(', ')
     toast.promise(navigator.clipboard.writeText(textToCopy), {
       loading: 'Copying...',
       success: () => {
         setIsCopied(true)
-        setTimeout(() => setIsCopied(false), 2000) // 重置动画状态，2秒后恢复
+        setTimeout(() => setIsCopied(false), 2000)
+        setTimeout(() => {
+          toast(
+            <p>
+              {`You can open the visualizer through this link: `}
+              <a
+                href={`https://open-spaced-repetition.github.io/anki_fsrs_visualizer/?w=${textToCopy}&m=${0.9}&e=${enable_short_term ? 1 : 0}`}
+                className="text-blue-500 underline"
+                target="_blank"
+              >
+                anki fsrs visualizer
+              </a>
+            </p>,
+            { duration: 10000 },
+          )
+        })
         return 'Copied!'
       },
       error: 'Failed to copy',
