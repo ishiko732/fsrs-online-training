@@ -18,7 +18,6 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
   const startTime = useRef<DOMHighResTimeStamp>(0)
   const [train_time, setTrain_time] = useState<DOMHighResTimeStamp>(0)
   const initdRef = useRef(false)
-  const [inValid, setInValid] = useState(false)
 
   const handleProgress = (wasmMemoryBuffer: ArrayBuffer, pointer: number) => {
     const { itemsProcessed, itemsTotal } = getProgress(wasmMemoryBuffer, pointer)
@@ -43,7 +42,6 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
             timeIdRef.current = timeId
           } else {
             toast.warning(`Your browser or device does not support displaying the progress bar.`, { duration: 10000 })
-            setInValid(true)
           }
         } else if (progressState.tag === 'finish') {
           clearInterval(timeIdRef.current)
@@ -53,14 +51,11 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
           console.log('finish')
         } else if (progressState.tag === 'initd') {
           console.log('initd')
-          const model = enableShortTerm ? 'Short-Term' : 'Long-Term'
-          if (progressState.info === 'true') {
-            toast(`Model(${model}) initialized`, { duration: 10000 })
-            initdRef.current = true
-          } else {
-            toast.error(`Failed to initialize model(${model})`)
-            setError('Failed to initialize model')
-          }
+          toast(`Model initialized`, { duration: 10000 })
+          initdRef.current = true
+        } else if (progressState.tag === 'initd-failed') {
+          console.error('initd-failed')
+          toast.error(`Model initialization failed`)
         } else if (progressState.tag === 'error') {
           setError(progressState.error)
           const error = new Error(progressState.error)
@@ -77,8 +72,8 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
       handlerMessage(event)
     }
     workerRef.current.onerror = (err) => {
-      setError(`worker failed:${err.message}`)
-      Sentry.captureException(err.error)
+      Sentry.captureException(err.error || err)
+      setError(err.message)
     }
     workerRef.current.postMessage({ init: true })
 
