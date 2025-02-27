@@ -2,6 +2,7 @@ import { getProgress } from '@api/services/collect'
 import type { FSRSItem, ProgressState } from '@api/services/types'
 import * as Sentry from '@sentry/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 
 export type TrainFSRSProps = {
   enableShortTerm: boolean
@@ -16,6 +17,7 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
   const [params, setParams] = useState<number[]>([])
   const startTime = useRef<DOMHighResTimeStamp>(0)
   const [train_time, setTrain_time] = useState<DOMHighResTimeStamp>(0)
+  const initdRef = useRef(false)
 
   const handleProgress = (wasmMemoryBuffer: ArrayBuffer, pointer: number) => {
     const { itemsProcessed, itemsTotal } = getProgress(wasmMemoryBuffer, pointer)
@@ -31,12 +33,16 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
         const progressState = event.data as ProgressState
         if (progressState.tag === 'start') {
           const { wasmMemoryBuffer, pointer } = progressState
-          handleProgress(wasmMemoryBuffer, pointer)
-
-          const timeId = setInterval(() => {
+          if (wasmMemoryBuffer && pointer) {
             handleProgress(wasmMemoryBuffer, pointer)
-          }, 100)
-          timeIdRef.current = timeId
+
+            const timeId = setInterval(() => {
+              handleProgress(wasmMemoryBuffer, pointer)
+            }, 100)
+            timeIdRef.current = timeId
+          } else {
+            toast.warning(`Your browser or device does not support displaying the progress bar.`, { duration: 10000 })
+          }
         } else if (progressState.tag === 'finish') {
           clearInterval(timeIdRef.current)
           setParams([...progressState.parameters])
@@ -45,11 +51,17 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
           console.log('finish')
         } else if (progressState.tag === 'initd') {
           console.log('initd')
+          toast(`Model initialized`, { duration: 10000 })
+          initdRef.current = true
+        } else if (progressState.tag === 'initd-failed') {
+          console.error('initd-failed')
+          toast.error(`Model initialization failed`)
         } else if (progressState.tag === 'error') {
           setError(progressState.error)
           const error = new Error(progressState.error)
           error.name = 'WorkerError'
           Sentry.captureException(error)
+          toast.error(`${progressState.error}`)
           console.error('Unknown progress state:', progressState)
         }
       }
@@ -60,7 +72,7 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
       handlerMessage(event)
     }
     workerRef.current.onerror = (err) => {
-      Sentry.captureException(err)
+      Sentry.captureException(err.error || err)
       setError(err.message)
     }
     workerRef.current.postMessage({ init: true })
@@ -72,6 +84,12 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
 
   const train = useCallback(
     (items: FSRSItem[]) => {
+      // if (!initd) {
+      //   const model = enableShortTerm ? 'Short-Term' : 'Long-Term'
+      //   setError(`Model(${model}) not initialized`)
+      //   toast.error(`Model(${model}) not initialized`)
+      //   return
+      // }
       setIsTraining(true)
       setProgress(0)
       setParams([])

@@ -7,15 +7,15 @@ export interface ParseData {
 }
 
 export interface AnalyzeCSVResult {
-  fields: string[],
-  sampleData: ParseData[],
+  fields: string[]
+  sampleData: ParseData[]
   summary: {
-    rowCount: number,
-    columnCount: number,
-    grouped: number,
-    fsrsItems: number,
+    rowCount: number
+    columnCount: number
+    grouped: number
+    fsrsItems: number
     cost_time: number
-  },
+  }
   fsrs_items: FSRSItem[]
 }
 
@@ -34,8 +34,8 @@ export interface ProgressValue {
 
 export interface ProgressStart {
   tag: 'start'
-  wasmMemoryBuffer: ArrayBuffer
-  pointer: number
+  wasmMemoryBuffer?: ArrayBuffer
+  pointer?: number
 }
 
 export interface ProgressFinish {
@@ -54,7 +54,7 @@ interface Progress extends ProgressItem {
 }
 
 interface InitdWorker {
-  tag: 'initd'
+  tag: 'initd'|'initd-failed'
 }
 
 interface WorkerErrorInfo {

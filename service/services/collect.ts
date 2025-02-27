@@ -1,5 +1,5 @@
 import { get_timezone_offset } from '@components/lib/tz'
-import Papa from 'papaparse';
+import Papa from 'papaparse'
 
 import type { AnalyzeCSVResult, FSRSItem, FSRSReview, ParseData } from './types'
 
@@ -26,7 +26,7 @@ function dateDiffInDays(_a: number, _b: number) {
 
 export const convertToFSRSItem = (offset_hour: number, next_day_start: number, datum: ParseData[]): FSRSItem[] => {
   const history = datum
-    .map((data) => [convertTime(data.review_time, offset_hour/** TODO */, next_day_start), parseInt(data.review_rating)])
+    .map((data) => [convertTime(data.review_time, offset_hour /** TODO */, next_day_start), parseInt(data.review_rating)])
     .sort((a, b) => a[0] - b[0])
 
   const reviews: FSRSReview[] = []
@@ -88,9 +88,8 @@ export const analyze = async (file: File, timezone: string, next_day_start: numb
         }
       },
       complete: () => {
-        const fields = Object.keys(sampleData[0]) ?? []
-        const fsrs_items: FSRSItem[] = Array.from(map.values())
-          .flatMap((item) => convertToFSRSItem(offset_hour, next_day_start, item))
+        const fields = sampleData.length > 0 ? (Object.keys(sampleData?.[0]) ?? []) : []
+        const fsrs_items: FSRSItem[] = Array.from(map.values()).flatMap((item) => convertToFSRSItem(offset_hour, next_day_start, item))
         const cost_time = performance.now() - start
         resolve({
           fields: fields,
@@ -108,8 +107,8 @@ export const analyze = async (file: File, timezone: string, next_day_start: numb
       error: (err) => {
         reject(err)
       },
-    });
-  });
+    })
+  })
 }
 
 export const analyzeCSV = async (file: File, timezone: string, next_day_start: number) => {
