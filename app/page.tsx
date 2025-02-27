@@ -161,6 +161,8 @@ export default function Home() {
                 <li>card_id(integer or string)</li>
                 <li>review_time(integer)</li>
                 <li>review_rating([0,4])</li>
+                <li>review_state([0,3])</li>
+                <li>Optional:review_duration(ms)</li>
               </ul>
             </div>
           </div>
