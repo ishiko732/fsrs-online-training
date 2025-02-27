@@ -16,15 +16,13 @@ self.onmessage = async (event) => {
       await initFSRS()
       self.postMessage({
         tag: 'initd',
-        info: 'true',
       })
     } catch (e) {
       self.postMessage({
         tag: 'initd',
-        info: 'false',
       })
       inValid = true
-      throw e
+      console.error(e)
     }
   }
   if (items instanceof Array) {

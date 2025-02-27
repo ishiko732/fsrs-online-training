@@ -54,13 +54,13 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
         } else if (progressState.tag === 'initd') {
           console.log('initd')
           const model = enableShortTerm ? 'Short-Term' : 'Long-Term'
-          if (progressState.info === 'true') {
-            toast(`Model(${model}) initialized`, { duration: 10000 })
-            setInitd(true)
-          } else {
-            toast.error(`Failed to initialize model(${model})`)
-            setError('Failed to initialize model')
-          }
+          // if (progressState.info === 'true') {
+          //   toast(`Model(${model}) initialized`, { duration: 10000 })
+          //   setInitd(true)
+          // } else {
+          //   toast.error(`Failed to initialize model(${model})`)
+          //   setError('Failed to initialize model')
+          // }
         } else if (progressState.tag === 'error') {
           setError(progressState.error)
           const error = new Error(progressState.error)
@@ -77,7 +77,7 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
       handlerMessage(event)
     }
     workerRef.current.onerror = (err) => {
-      setError(`worker failed:${err}`)
+      setError(`worker failed:${err.message}`)
       Sentry.captureException(err.error)
     }
     workerRef.current.postMessage({ init: true })
