@@ -8,13 +8,24 @@ Error.stackTraceLimit = 30
 
 let container: InitOutput | null = null
 let progress: Progress | null = null
+let inValid = false
 self.onmessage = async (event) => {
   const { items, enableShortTerm, init } = event.data
   if (init) {
-    await initFSRS()
-    self.postMessage({
-      tag: 'initd',
-    })
+    try {
+      await initFSRS()
+      self.postMessage({
+        tag: 'initd',
+        info: 'true',
+      })
+    } catch (e) {
+      self.postMessage({
+        tag: 'initd',
+        info: 'false',
+      })
+      inValid = true
+      console.error(e)
+    }
   }
   if (items instanceof Array) {
     await computeParameters(items, enableShortTerm ?? true)
@@ -27,10 +38,23 @@ async function initFSRS() {
   try {
     if (!container) {
       container = await init(base64ToArrayBuffer(fsrsBrowserWasmBase64))
-      await initThreadPool(navigator.hardwareConcurrency)
+      try {
+        // Safari does not support ThreadPool
+        await initThreadPool(navigator.hardwareConcurrency)
+      } catch {
+        // console.error(e)
+      }
     }
   } catch (e) {
-    self.postMessage({ tag: 'error', error: `init failed error:${(e as Error).message}` })
+    const error = e as Error
+    self.postMessage({
+      tag: 'error',
+      error: JSON.stringify({
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      }),
+    })
   }
 }
 
@@ -41,15 +65,22 @@ export async function computeParameters(items: FSRSItem[], enableShortTerm: bool
   const deltaTs = new Uint32Array(items.flatMap((item) => item.map((review) => review.deltaT)))
   const lengths = new Uint32Array(items.map((item) => item.length))
   const fsrs = new Fsrs(Float32Array.from(default_w))
-  progress = Progress.new()
-  // must set next.config.js
-  // https://vercel.com/docs/projects/project-configuration#headers
-  // https://vercel.com/guides/fix-shared-array-buffer-not-defined-nextjs-react
-  self.postMessage({
-    tag: 'start',
-    wasmMemoryBuffer: container!.memory.buffer,
-    pointer: progress.pointer(),
-  } satisfies ProgressStart)
+
+  if (inValid) {
+    progress = Progress.new()
+    // must set next.config.js
+    // https://vercel.com/docs/projects/project-configuration#headers
+    // https://vercel.com/guides/fix-shared-array-buffer-not-defined-nextjs-react
+    self.postMessage({
+      tag: 'start',
+      wasmMemoryBuffer: container!.memory.buffer,
+      pointer: progress.pointer(),
+    } satisfies ProgressStart)
+  } else {
+    self.postMessage({
+      tag: 'start',
+    } satisfies ProgressStart)
+  }
   const parameters = fsrs.computeParameters(ratings, deltaTs, lengths, progress, enableShortTerm)
   self.postMessage({
     tag: 'finish',

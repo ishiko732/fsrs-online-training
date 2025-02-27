@@ -80,7 +80,8 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
     return () => {
       workerRef.current?.terminate()
     }
-  }, [setError])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const train = useCallback(
     (items: FSRSItem[]) => {
@@ -110,6 +111,7 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
     progress,
     train,
     isDone,
+    inValid,
     train_time,
   } as const
 }
