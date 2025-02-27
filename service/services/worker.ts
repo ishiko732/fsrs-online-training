@@ -36,7 +36,12 @@ async function initFSRS() {
   try {
     if (!container) {
       container = await init(base64ToArrayBuffer(fsrsBrowserWasmBase64))
-      await initThreadPool(navigator.hardwareConcurrency)
+      try {
+        // Safari does not support ThreadPool
+        await initThreadPool(navigator.hardwareConcurrency)
+      } catch (e) {
+        console.error(e)
+      }
     }
   } catch (e) {
     const error = e as Error

@@ -71,8 +71,8 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
       handlerMessage(event)
     }
     workerRef.current.onerror = (err) => {
-      Sentry.captureException(err)
-      setError(err.message)
+      setError(`worker failed:${err.message}`)
+      Sentry.captureException(err.error)
     }
     workerRef.current.postMessage({ init: true })
 
