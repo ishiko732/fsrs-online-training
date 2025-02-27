@@ -8,6 +8,7 @@ Error.stackTraceLimit = 30
 
 let container: InitOutput | null = null
 let progress: Progress | null = null
+let inValid = false
 self.onmessage = async (event) => {
   const { items, enableShortTerm, init } = event.data
   if (init) {
@@ -22,6 +23,7 @@ self.onmessage = async (event) => {
         tag: 'initd',
         success: false,
       })
+      inValid = true
       throw e
     }
   }
@@ -39,8 +41,8 @@ async function initFSRS() {
       try {
         // Safari does not support ThreadPool
         await initThreadPool(navigator.hardwareConcurrency)
-      } catch (e) {
-        console.error(e)
+      } catch {
+        // console.error(e)
       }
     }
   } catch (e) {
@@ -63,15 +65,22 @@ export async function computeParameters(items: FSRSItem[], enableShortTerm: bool
   const deltaTs = new Uint32Array(items.flatMap((item) => item.map((review) => review.deltaT)))
   const lengths = new Uint32Array(items.map((item) => item.length))
   const fsrs = new Fsrs(Float32Array.from(default_w))
-  progress = Progress.new()
-  // must set next.config.js
-  // https://vercel.com/docs/projects/project-configuration#headers
-  // https://vercel.com/guides/fix-shared-array-buffer-not-defined-nextjs-react
-  self.postMessage({
-    tag: 'start',
-    wasmMemoryBuffer: container!.memory.buffer,
-    pointer: progress.pointer(),
-  } satisfies ProgressStart)
+
+  if (inValid) {
+    progress = Progress.new()
+    // must set next.config.js
+    // https://vercel.com/docs/projects/project-configuration#headers
+    // https://vercel.com/guides/fix-shared-array-buffer-not-defined-nextjs-react
+    self.postMessage({
+      tag: 'start',
+      wasmMemoryBuffer: container!.memory.buffer,
+      pointer: progress.pointer(),
+    } satisfies ProgressStart)
+  } else {
+    self.postMessage({
+      tag: 'start',
+    } satisfies ProgressStart)
+  }
   const parameters = fsrs.computeParameters(ratings, deltaTs, lengths, progress, enableShortTerm)
   self.postMessage({
     tag: 'finish',

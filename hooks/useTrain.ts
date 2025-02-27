@@ -18,6 +18,7 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
   const startTime = useRef<DOMHighResTimeStamp>(0)
   const [train_time, setTrain_time] = useState<DOMHighResTimeStamp>(0)
   const [initd, setInitd] = useState(false)
+  const [inValid, setInValid] = useState(false)
 
   const handleProgress = (wasmMemoryBuffer: ArrayBuffer, pointer: number) => {
     const { itemsProcessed, itemsTotal } = getProgress(wasmMemoryBuffer, pointer)
@@ -33,12 +34,17 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
         const progressState = event.data as ProgressState
         if (progressState.tag === 'start') {
           const { wasmMemoryBuffer, pointer } = progressState
-          handleProgress(wasmMemoryBuffer, pointer)
-
-          const timeId = setInterval(() => {
+          if (wasmMemoryBuffer && pointer) {
             handleProgress(wasmMemoryBuffer, pointer)
-          }, 100)
-          timeIdRef.current = timeId
+
+            const timeId = setInterval(() => {
+              handleProgress(wasmMemoryBuffer, pointer)
+            }, 100)
+            timeIdRef.current = timeId
+          } else {
+            toast.warning(`Your browser or device does not support displaying the progress bar.`, { duration: 10000 })
+            setInValid(true)
+          }
         } else if (progressState.tag === 'finish') {
           clearInterval(timeIdRef.current)
           setParams([...progressState.parameters])
@@ -71,7 +77,7 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
       handlerMessage(event)
     }
     workerRef.current.onerror = (err) => {
-      setError(`worker failed:${err.message}`)
+      setError(`worker failed:${err.error}`)
       Sentry.captureException(err.error)
     }
     workerRef.current.postMessage({ init: true })
@@ -109,6 +115,7 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
     progress,
     train,
     isDone,
+    inValid,
     train_time,
   } as const
 }

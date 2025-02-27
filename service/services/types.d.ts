@@ -34,8 +34,8 @@ export interface ProgressValue {
 
 export interface ProgressStart {
   tag: 'start'
-  wasmMemoryBuffer: ArrayBuffer
-  pointer: number
+  wasmMemoryBuffer?: ArrayBuffer
+  pointer?: number
 }
 
 export interface ProgressFinish {
