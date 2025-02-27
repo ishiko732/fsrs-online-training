@@ -49,7 +49,7 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
           console.log('initd')
           const model = enableShortTerm ? 'Short-Term' : 'Long-Term'
           if (progressState.success) {
-            toast(`Model(model}) initialized`, { duration: 10000 })
+            toast(`Model(${model}) initialized`, { duration: 10000 })
             setInitd(true)
           } else {
             toast.error(`Failed to initialize model(${model})`)
