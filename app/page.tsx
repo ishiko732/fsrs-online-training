@@ -62,12 +62,16 @@ export default function Home() {
     toast.promise(analysisResult, {
       loading: 'Analyzing CSV...',
       success: (analysisResult) => {
-        toast.promise(Sleep(2000), {
-          loading: 'Training...',
-        })
-        train_short(analysisResult.fsrs_items)
-        train_long(analysisResult.fsrs_items)
         setAnalysis(analysisResult)
+        if (analysisResult?.fsrs_items.length > 0) {
+          toast.promise(Sleep(2000), {
+            loading: 'Training...',
+          })
+          train_short(analysisResult.fsrs_items)
+          train_long(analysisResult.fsrs_items)
+        } else {
+          toast.warning('No data to train')
+        }
         return `Analysis completed`
       },
       error: () => {

@@ -43,38 +43,42 @@ export default function AnalysisForm({
               <dt className="text-sm font-medium text-gray-500">Number of FSRSItems</dt>
               <dd className="mt-1 text-sm text-gray-900">{analysis.summary.fsrsItems}</dd>
             </div>
-            <div className="sm:col-span-2">
-              <dt className="text-sm font-medium text-gray-500">Column Names</dt>
-              <dd className="mt-1 text-sm text-gray-900">{analysis.fields.join(', ')}</dd>
-            </div>
-            <div className="sm:col-span-2">
-              <dt className="text-sm font-medium text-gray-500">Sample Data (First 5 Rows)</dt>
-              <dd className="mt-1 overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      {analysis.fields.map((column: string) => (
-                        <th key={column} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          {column}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {/* eslint-disable @typescript-eslint/no-explicit-any */}
-                    {analysis.sampleData.map((row: any, index: number) => (
-                      <tr key={index}>
+            {analysis.fields.length > 0 && (
+              <div className="sm:col-span-2">
+                <dt className="text-sm font-medium text-gray-500">Column Names</dt>
+                <dd className="mt-1 text-sm text-gray-900">{analysis.fields.join(', ')}</dd>
+              </div>
+            )}
+            {analysis.sampleData.length > 0 && (
+              <div className="sm:col-span-2">
+                <dt className="text-sm font-medium text-gray-500">Sample Data (First 5 Rows)</dt>
+                <dd className="mt-1 overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
                         {analysis.fields.map((column: string) => (
-                          <td key={column} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {row[column]}
-                          </td>
+                          <th key={column} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            {column}
+                          </th>
                         ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </dd>
-            </div>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {/* eslint-disable @typescript-eslint/no-explicit-any */}
+                      {analysis.sampleData.map((row: any, index: number) => (
+                        <tr key={index}>
+                          {analysis.fields.map((column: string) => (
+                            <td key={column} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {row[column]}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </dd>
+              </div>
+            )}
           </dl>
         </div>
       </div>
