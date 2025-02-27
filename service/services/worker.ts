@@ -16,12 +16,12 @@ self.onmessage = async (event) => {
       await initFSRS()
       self.postMessage({
         tag: 'initd',
-        success: true,
+        info: 'true',
       })
     } catch (e) {
       self.postMessage({
         tag: 'initd',
-        success: false,
+        info: 'false',
       })
       inValid = true
       throw e

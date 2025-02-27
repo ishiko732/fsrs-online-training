@@ -55,7 +55,7 @@ interface Progress extends ProgressItem {
 
 interface InitdWorker {
   tag: 'initd'
-  success: boolean
+  info: 'true' | 'false'
 }
 
 interface WorkerErrorInfo {

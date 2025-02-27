@@ -54,7 +54,7 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
         } else if (progressState.tag === 'initd') {
           console.log('initd')
           const model = enableShortTerm ? 'Short-Term' : 'Long-Term'
-          if (progressState.success) {
+          if (progressState.info === 'true') {
             toast(`Model(${model}) initialized`, { duration: 10000 })
             setInitd(true)
           } else {
@@ -77,7 +77,7 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
       handlerMessage(event)
     }
     workerRef.current.onerror = (err) => {
-      setError(`worker failed:${err.error}`)
+      setError(`worker failed:${err}`)
       Sentry.captureException(err.error)
     }
     workerRef.current.postMessage({ init: true })
