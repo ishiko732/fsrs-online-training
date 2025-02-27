@@ -2,6 +2,7 @@ import { getProgress } from '@api/services/collect'
 import type { FSRSItem, ProgressState } from '@api/services/types'
 import * as Sentry from '@sentry/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 
 export type TrainFSRSProps = {
   enableShortTerm: boolean
@@ -44,12 +45,14 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
           setTrain_time(performance.now() - startTime.current)
           console.log('finish')
         } else if (progressState.tag === 'initd') {
+          toast(`Model(${enableShortTerm ? 'Short-Term' : 'Long-Term'}) initialized`, { duration: 1000 })
           console.log('initd')
         } else if (progressState.tag === 'error') {
           setError(progressState.error)
           const error = new Error(progressState.error)
           error.name = 'WorkerError'
           Sentry.captureException(error)
+          toast.error(`${progressState.error}`)
           console.error('Unknown progress state:', progressState)
         }
       }

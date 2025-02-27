@@ -1,4 +1,5 @@
 import { base64ToArrayBuffer, fsrsBrowserWasmBase64 } from '@api/services/wasm'
+import * as Sentry from '@sentry/nextjs'
 import init, { Fsrs, InitOutput, initThreadPool, Progress } from 'fsrs-browser/fsrs_browser'
 import { default_w } from 'ts-fsrs'
 
@@ -30,6 +31,7 @@ async function initFSRS() {
       await initThreadPool(navigator.hardwareConcurrency)
     }
   } catch (e) {
+    Sentry.captureException(e)
     self.postMessage({ tag: 'error', error: `init failed error:${(e as Error).message}` })
   }
 }
