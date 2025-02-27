@@ -17,7 +17,7 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
   const [params, setParams] = useState<number[]>([])
   const startTime = useRef<DOMHighResTimeStamp>(0)
   const [train_time, setTrain_time] = useState<DOMHighResTimeStamp>(0)
-  const [initd, setInitd] = useState(false)
+  const initdRef = useRef(false)
   const [inValid, setInValid] = useState(false)
 
   const handleProgress = (wasmMemoryBuffer: ArrayBuffer, pointer: number) => {
@@ -54,13 +54,13 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
         } else if (progressState.tag === 'initd') {
           console.log('initd')
           const model = enableShortTerm ? 'Short-Term' : 'Long-Term'
-          // if (progressState.info === 'true') {
-          //   toast(`Model(${model}) initialized`, { duration: 10000 })
-          //   setInitd(true)
-          // } else {
-          //   toast.error(`Failed to initialize model(${model})`)
-          //   setError('Failed to initialize model')
-          // }
+          if (progressState.info === 'true') {
+            toast(`Model(${model}) initialized`, { duration: 10000 })
+            initdRef.current = true
+          } else {
+            toast.error(`Failed to initialize model(${model})`)
+            setError('Failed to initialize model')
+          }
         } else if (progressState.tag === 'error') {
           setError(progressState.error)
           const error = new Error(progressState.error)
@@ -85,16 +85,17 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
     return () => {
       workerRef.current?.terminate()
     }
-  }, [enableShortTerm, setError])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const train = useCallback(
     (items: FSRSItem[]) => {
-      if (!initd) {
-        const model = enableShortTerm ? 'Short-Term' : 'Long-Term'
-        setError(`Model(${model}) not initialized`)
-        toast.error(`Model(${model}) not initialized`)
-        return
-      }
+      // if (!initd) {
+      //   const model = enableShortTerm ? 'Short-Term' : 'Long-Term'
+      //   setError(`Model(${model}) not initialized`)
+      //   toast.error(`Model(${model}) not initialized`)
+      //   return
+      // }
       setIsTraining(true)
       setProgress(0)
       setParams([])
@@ -102,7 +103,7 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
       startTime.current = performance.now()
       workerRef.current?.postMessage({ items, enableShortTerm })
     },
-    [enableShortTerm, initd, setError],
+    [enableShortTerm],
   )
 
   const isDone = () => {
