@@ -17,6 +17,7 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
   const [params, setParams] = useState<number[]>([])
   const startTime = useRef<DOMHighResTimeStamp>(0)
   const [train_time, setTrain_time] = useState<DOMHighResTimeStamp>(0)
+  const [initd, setInitd] = useState(false)
 
   const handleProgress = (wasmMemoryBuffer: ArrayBuffer, pointer: number) => {
     const { itemsProcessed, itemsTotal } = getProgress(wasmMemoryBuffer, pointer)
@@ -45,8 +46,15 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
           setTrain_time(performance.now() - startTime.current)
           console.log('finish')
         } else if (progressState.tag === 'initd') {
-          toast(`Model(${enableShortTerm ? 'Short-Term' : 'Long-Term'}) initialized`, { duration: 1000 })
           console.log('initd')
+          const model = enableShortTerm ? 'Short-Term' : 'Long-Term'
+          if (progressState.success) {
+            toast(`Model(model}) initialized`, { duration: 10000 })
+            setInitd(true)
+          } else {
+            toast.error(`Failed to initialize model(${model})`)
+            setError('Failed to initialize model')
+          }
         } else if (progressState.tag === 'error') {
           setError(progressState.error)
           const error = new Error(progressState.error)
@@ -71,10 +79,16 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
     return () => {
       workerRef.current?.terminate()
     }
-  }, [setError])
+  }, [enableShortTerm, setError])
 
   const train = useCallback(
     (items: FSRSItem[]) => {
+      if (!initd) {
+        const model = enableShortTerm ? 'Short-Term' : 'Long-Term'
+        setError(`Model(${model}) not initialized`)
+        toast.error(`Model(${model}) not initialized`)
+        return
+      }
       setIsTraining(true)
       setProgress(0)
       setParams([])
@@ -82,7 +96,7 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
       startTime.current = performance.now()
       workerRef.current?.postMessage({ items, enableShortTerm })
     },
-    [enableShortTerm],
+    [enableShortTerm, initd, setError],
   )
 
   const isDone = () => {

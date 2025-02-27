@@ -11,10 +11,19 @@ let progress: Progress | null = null
 self.onmessage = async (event) => {
   const { items, enableShortTerm, init } = event.data
   if (init) {
-    await initFSRS()
-    self.postMessage({
-      tag: 'initd',
-    })
+    try {
+      await initFSRS()
+      self.postMessage({
+        tag: 'initd',
+        success: true,
+      })
+    } catch (e) {
+      self.postMessage({
+        tag: 'initd',
+        success: false,
+      })
+      throw e
+    }
   }
   if (items instanceof Array) {
     await computeParameters(items, enableShortTerm ?? true)
