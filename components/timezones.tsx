@@ -3,7 +3,7 @@
 import { Button } from '@components/ui/button'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@components/ui/popover'
-import { timezones } from '@lib/tz'
+import { timezones } from '@lib/timezones'
 import { cn } from '@lib/utils'
 import { Check, ChevronsUpDown } from 'lucide-react'
 import { useState } from 'react'
@@ -39,14 +39,7 @@ export default function TimezoneSelector({ tz, setTz, className }: TimezoneSelec
               <CommandEmpty>No Dataset</CommandEmpty>
               <CommandGroup>
                 {timezones.map((timezone, index) => (
-                  <CommandItem
-                    key={index}
-                    value={timezone}
-                    onSelect={handleClick}
-                    aria-label={timezone}
-                    role="select"
-                    className={'w-full'}
-                  >
+                  <CommandItem key={index} value={timezone} onSelect={handleClick} aria-label={timezone} role="select" className={'w-full'}>
                     <Check className={cn('mr-2 h-4 w-4', timezone === tz ? 'opacity-100' : 'opacity-0')} />
                     {timezone}
                   </CommandItem>

@@ -29,3 +29,13 @@ export function base64ToArrayBuffer(base64: string) {
 fs.writeFileSync(outputPath, wasmTsContent)
 
 console.log(`Successfully converted fsrs_browser_bg.wasm to Base64 and wrote to service/services/wasm.ts`)
+
+const timezones = Intl.supportedValuesOf('timeZone')
+const timeZoneOutputPath = path.join(__dirname, 'components', 'lib', 'timezones.ts')
+const timezonesContent = `
+// https://stackoverflow.com/questions/38399465/how-to-get-list-of-all-timezones-in-javascript
+// issues: https://github.com/ishiko732/fsrs-online-training/issues/4
+export const timezones = ${JSON.stringify(timezones)}
+`
+fs.writeFileSync(timeZoneOutputPath, timezonesContent)
+console.log(`Successfully wrote timezones to components/lib/timezones.ts`)
