@@ -1,11 +1,8 @@
-import TimezoneSelector from '@components/timezones'
+
 
 //https://github.com/ishiko732/ts-fsrs-demo/blob/c3a6cbc6ce9be2c321e238049073b3302e6cbe34/src/lib/date.ts#L1-L31
 export const currentTz = Intl.DateTimeFormat().resolvedOptions().timeZone
 
-// https://stackoverflow.com/questions/38399465/how-to-get-list-of-all-timezones-in-javascript
-// issues: https://github.com/ishiko732/fsrs-online-training/issues/4
-export const timezones = TimezoneSelector
 
 export function get_timezone_offset(timeZone: string): number {
   const timeZoneName = Intl.DateTimeFormat('ia', {
