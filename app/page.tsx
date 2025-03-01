@@ -8,7 +8,6 @@ import { Sleep } from '@components/lib/time'
 import { currentTz, get_timezone_offset } from '@components/lib/tz'
 import TimezoneSelector from '@components/timezones'
 import { Input } from '@components/ui/input'
-import { LoadingSpinner } from '@components/ui/loadingSpinner'
 import { Progress } from '@components/ui/progress'
 import useAnalyze from '@hooks/useAnalyze'
 import useTrainFSRS from '@hooks/useTrain'
@@ -32,7 +31,6 @@ export default function Home() {
     train: train_short,
     isDone: isDone_short,
     train_time: train_time_short,
-    inValid: inValid_short,
   } = useTrainFSRS({ enableShortTerm: true, setError })
   const {
     params: params_long,
@@ -41,7 +39,6 @@ export default function Home() {
     train: train_long,
     isDone: isDone_long,
     train_time: train_time_long,
-    inValid: inValid_long,
   } = useTrainFSRS({ enableShortTerm: false, setError })
 
   const analyzeCSV = useAnalyze({ setError, setProgressInfo })
@@ -173,14 +170,8 @@ export default function Home() {
 
         {(isTraining_short || isTraining_long) && (
           <div className="mt-4">
-            {inValid_short || inValid_long ? (
-              <LoadingSpinner className="mt-2 text-sm text-gray-500 text-center" />
-            ) : (
-              <>
-                <Progress value={merge_progress} className="w-full" />
-                <p className="mt-2 text-sm text-gray-500 text-center">Train ... {merge_progress}%</p>
-              </>
-            )}
+            <Progress value={merge_progress} className="w-full" />
+            <p className="mt-2 text-sm text-gray-500 text-center">Train ... {merge_progress}%</p>
           </div>
         )}
         {isDone_short() && isDone_long() && (

@@ -111,7 +111,6 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
     progress,
     train,
     isDone,
-    inValid,
     train_time,
   } as const
 }
