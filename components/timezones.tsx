@@ -9,9 +9,14 @@ import { useState } from 'react'
 
 import { Input } from './ui/input'
 
-export type TimezoneSelectorProps = { tz: string; setTz: (tz: string) => void; className?: string }
+export type TimezoneSelectorProps = {
+  tz: string
+  setTz: (tz: string) => void
+  className?: string
+  disabled?: boolean
+}
 
-export default function TimezoneSelector({ tz, setTz, className }: TimezoneSelectorProps) {
+export default function TimezoneSelector({ tz, setTz, className, disabled }: TimezoneSelectorProps) {
   const [open, setOpen] = useState(false)
   const handleClick = (tz: string) => {
     setTz(tz)
@@ -29,6 +34,7 @@ export default function TimezoneSelector({ tz, setTz, className }: TimezoneSelec
               placeholder="Select TimeZone..."
               value={tz}
               onChange={(e) => setTz(e.target.value)}
+              disabled={disabled}
             />
           </div>
         </PopoverTrigger>

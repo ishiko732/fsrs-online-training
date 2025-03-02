@@ -8,6 +8,7 @@ import { Sleep } from '@components/lib/time'
 import { currentTz, get_timezone_offset } from '@components/lib/tz'
 import TimezoneSelector from '@components/timezones'
 import { Input } from '@components/ui/input'
+import { Label } from '@components/ui/label'
 import { Progress } from '@components/ui/progress'
 import useAnalyze from '@hooks/useAnalyze'
 import useTrainFSRS from '@hooks/useTrain'
@@ -111,17 +112,23 @@ export default function Home() {
 
         {/* Timezone */}
         <div className="mb-4 sm:flex justify-between sm:items-center">
-          <label htmlFor="timezone" className="text-sm font-medium text-gray-700">
-            Timezone
-          </label>
-          <TimezoneSelector tz={draftTz} setTz={setDraftTz} />
+          <div className="flex flex-col">
+            <Label htmlFor="timezone" className="text-sm font-medium text-gray-700">
+              Timezone
+            </Label>
+            <label className="text-sm text-gray-500">The timezone of the user.</label>
+          </div>
+          <TimezoneSelector tz={draftTz} setTz={setDraftTz} disabled={isTraining_short || isTraining_long} />
         </div>
 
         {/* Next Day Start At Input */}
         <div className="mb-4 sm:flex justify-between sm:items-center">
-          <label htmlFor="next-day-start-at" className="text-sm font-medium text-gray-700">
-            Next Day Start At
-          </label>
+          <div className="flex flex-col">
+            <label htmlFor="next-day-start-at" className="text-sm font-medium text-gray-700">
+              Next Day Start At
+            </label>
+            <label className="text-sm text-gray-500">The hour of the day when the next day starts.</label>
+          </div>
           <Input
             type="number"
             id="next-day-start-at"
@@ -130,6 +137,7 @@ export default function Home() {
             step={1}
             min={0}
             max={23}
+            disabled={isTraining_short || isTraining_long}
             className="w-full mt-1 block sm:w-1/2 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
           />
         </div>
@@ -137,7 +145,7 @@ export default function Home() {
           {...getRootProps()}
           className={`mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-lg ${
             isDragActive ? 'border-blue-400 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
-          } ${isTraining_short ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+          } ${isTraining_short || isTraining_long ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
         >
           <div className="space-y-1 text-center">
             <Upload className="mx-auto h-12 w-12 text-gray-400" aria-hidden="true" />
