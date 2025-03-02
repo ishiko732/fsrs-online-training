@@ -21,21 +21,19 @@ export default function TimezoneSelector({ tz, setTz, className }: TimezoneSelec
     <>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger className="w-full mt-1 block sm:w-1/2 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-          <>
-            <div className="flex w-full items-center space-x-2">
-              <Input
-                aria-expanded={open}
-                aria-label="Select TimeZone"
-                type="text"
-                placeholder="Select TimeZone..."
-                value={tz}
-                onChange={(e) => setTz(e.target.value)}
-              />
-            </div>
-          </>
+          <div className="flex w-full items-center space-x-2">
+            <Input
+              aria-expanded={open}
+              aria-label="Select TimeZone"
+              type="text"
+              placeholder="Select TimeZone..."
+              value={tz}
+              onChange={(e) => setTz(e.target.value)}
+            />
+          </div>
         </PopoverTrigger>
-        <PopoverContent className={cn('w-max p-0 text-left', className)}>
-          <Command className={'w-full'}>
+        <PopoverContent align="start" className={cn('p-0 text-left w-[var(--radix-popover-trigger-width)]', className)}>
+          <Command>
             <CommandInput placeholder="Search TimeZone..." />
             {/* https://github.com/shadcn-ui/ui/issues/2944 */}
             <CommandList className={'w-full'}>
