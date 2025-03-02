@@ -1,12 +1,13 @@
 'use client'
 
-import { Button } from '@components/ui/button'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@components/ui/popover'
 import { timezones } from '@lib/timezones'
 import { cn } from '@lib/utils'
-import { Check, ChevronsUpDown } from 'lucide-react'
+import { Check } from 'lucide-react'
 import { useState } from 'react'
+
+import { Input } from './ui/input'
 
 export type TimezoneSelectorProps = { tz: string; setTz: (tz: string) => void; className?: string }
 
@@ -19,17 +20,19 @@ export default function TimezoneSelector({ tz, setTz, className }: TimezoneSelec
   return (
     <>
       <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            role="combobox"
-            aria-expanded={open}
-            className="w-full sm:w-1/2 justify-between"
-            aria-label="Select TimeZone"
-          >
-            {tz || 'Select TimeZone...'}
-            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-          </Button>
+        <PopoverTrigger className="w-full mt-1 block sm:w-1/2 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+          <>
+            <div className="flex w-full items-center space-x-2">
+              <Input
+                aria-expanded={open}
+                aria-label="Select TimeZone"
+                type="text"
+                placeholder="Select TimeZone..."
+                value={tz}
+                onChange={(e) => setTz(e.target.value)}
+              />
+            </div>
+          </>
         </PopoverTrigger>
         <PopoverContent className={cn('w-max p-0 text-left', className)}>
           <Command className={'w-full'}>
