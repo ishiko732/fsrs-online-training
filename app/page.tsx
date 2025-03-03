@@ -21,7 +21,7 @@ import { toast } from 'sonner'
 
 import { AppType } from '@/app/api/[[...route]]/route'
 
-const client = hc<AppType>(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' /** default */)
+const client = hc<AppType>(process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_VERCEL_URL || 'http://localhost:3000' /** default */)
 
 const container: TCallback = {
   url: '',
