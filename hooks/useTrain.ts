@@ -7,9 +7,11 @@ import { toast } from 'sonner'
 export type TrainFSRSProps = {
   enableShortTerm: boolean
   setError: (error: string) => void
+  initdCallback?: () => void
+  doneCallback?: (params: number[]) => void
 }
 
-export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSProps) {
+export default function useTrainFSRS({ enableShortTerm, setError, initdCallback, doneCallback }: TrainFSRSProps) {
   const [progress, setProgress] = useState(0)
   const [isTraining, setIsTraining] = useState(false)
   const workerRef = useRef<Worker>(undefined)
@@ -45,17 +47,20 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
           }
         } else if (progressState.tag === 'finish') {
           clearInterval(timeIdRef.current)
-          setParams([...progressState.parameters])
+          const params = [...progressState.parameters]
+          setParams(params)
           setIsTraining(false)
           setTrain_time(performance.now() - startTime.current)
           console.log('finish')
+          doneCallback?.(params)
         } else if (progressState.tag === 'initd') {
           console.log('initd')
-          toast(`Model initialized`, { duration: 10000 })
+          initdCallback?.()
           initdRef.current = true
         } else if (progressState.tag === 'initd-failed') {
           console.error('initd-failed')
           toast.error(`Model initialization failed`)
+          initdRef.current = false
         } else if (progressState.tag === 'error') {
           setError(progressState.error)
           const error = new Error(progressState.error)
@@ -105,12 +110,20 @@ export default function useTrainFSRS({ enableShortTerm, setError }: TrainFSRSPro
     return params.length > 0 && !isTraining
   }
 
+  const clear = () => {
+    setParams([])
+    setProgress(0)
+    setIsTraining(false)
+    setTrain_time(0)
+  }
+
   return {
     params,
     isTraining,
     progress,
     train,
     isDone,
+    clear,
     train_time,
   } as const
 }

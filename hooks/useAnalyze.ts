@@ -7,7 +7,7 @@ type AnalyzeProps = {
 }
 
 export default function useAnalyze({ setError, setProgressInfo }: AnalyzeProps) {
-  const handlerCSV = async (file: File, tz: string, nextDayStartAt: number) => {
+  const handlerCSV = async (file: Papa.LocalFile, tz: string, nextDayStartAt: number) => {
     return analyze(file, tz, nextDayStartAt, setProgressInfo).catch((e) => {
       const error = e as Error
       error.name = 'AnalyzeError'

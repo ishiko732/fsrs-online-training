@@ -1,4 +1,5 @@
-import TrainApp from '@api/controllers/train'
+import SupportApp from '@api/controllers/support'
+// import TrainApp from '@api/controllers/train'
 import { Hono } from 'hono'
 import { handle } from 'hono/vercel'
 
@@ -12,8 +13,9 @@ const app = new Hono().basePath('/api').notFound(async (c) => {
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const routes = app
-// tip: It cannot run on Vercel because it got optimized away.
-.route('/train', TrainApp)
+  // tip: It cannot run on Vercel because it got optimized away.
+  // .route('/train', TrainApp)
+  .route('/support', SupportApp)
 
 const handler = handle(app)
 export { handler as DELETE, handler as GET, handler as POST, handler as PUT }

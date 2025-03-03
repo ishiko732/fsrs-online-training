@@ -1,5 +1,7 @@
 'use client'
 
+import { TCallback } from '@api/controllers/support'
+import { HashObject } from '@api/services/hash_parse'
 import AnalysisForm from '@components/Analysis'
 import CopyParams from '@components/CopyParams'
 import DemoCSV from '@components/Demo-csv'
@@ -12,10 +14,28 @@ import { Label } from '@components/ui/label'
 import { Progress } from '@components/ui/progress'
 import useAnalyze from '@hooks/useAnalyze'
 import useTrainFSRS from '@hooks/useTrain'
+import { hc } from 'hono/client'
 import { FileText, Upload } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { toast } from 'sonner'
+
+import { AppType } from '@/app/api/[[...route]]/route'
+
+export const client = hc<AppType>(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' /** default */)
+
+const container: TCallback = {
+  url: '',
+  body: {
+    tz: '',
+    nextDayStartAt: 0,
+    total_rows: 0,
+    total_cards: 0,
+    total_fsrs_items: 0,
+    short_term_params: [],
+    long_term_params: [],
+  },
+}
 
 export default function Home() {
   const [draftTz, setDraftTz] = useState<string>(currentTz)
@@ -31,43 +51,103 @@ export default function Home() {
     progress: progress_short,
     train: train_short,
     isDone: isDone_short,
+    clear: clear_short,
     train_time: train_time_short,
-  } = useTrainFSRS({ enableShortTerm: true, setError })
+  } = useTrainFSRS({
+    enableShortTerm: true,
+    setError,
+    initdCallback: () => handleInitd(true),
+    doneCallback: (params) => handleDone(params, true),
+  })
   const {
     params: params_long,
     isTraining: isTraining_long,
     progress: progress_long,
     train: train_long,
     isDone: isDone_long,
+    clear: clear_long,
     train_time: train_time_long,
-  } = useTrainFSRS({ enableShortTerm: false, setError })
+  } = useTrainFSRS({
+    enableShortTerm: false,
+    setError,
+    initdCallback: () => handleInitd(false),
+    doneCallback: (params) => handleDone(params, false),
+  })
+  const initdRef = useRef([false, false])
+  const doneRef = useRef([false, false])
 
   const analyzeCSV = useAnalyze({ setError, setProgressInfo })
 
-  const onDrop = async (acceptedFiles: File[]) => {
-    const file = acceptedFiles[0]
-    if (!file) return
+  const handleInitd = (enableShortTerm: boolean) => {
+    initdRef.current[enableShortTerm ? 0 : 1] = true
 
-    if (!file.name.endsWith('.csv')) {
-      setError('Please upload a CSV file')
-      return
+    const checked = initdRef.current.every((v) => v)
+    if (checked) {
+      toast.promise(handleHashChange, {
+        loading: 'Check...',
+      })
+      toast.info('Both models are initialized')
     }
+  }
 
+  const handleDone = (params: number[], enableShortTerm: boolean) => {
+    doneRef.current[enableShortTerm ? 0 : 1] = true
+    const checked = doneRef.current.every((v) => v)
+    container.body[enableShortTerm ? 'short_term_params' : 'long_term_params'] = params
+
+    if (checked && container.url) {
+      toast.promise(handleCallback(container), {
+        loading: 'Callback...',
+        success: 'Callback success',
+        error: 'Callback failed',
+      })
+    }
+  }
+
+  const handleCallback = (body: TCallback) => {
+    return client.api.support.callback.$post({
+      json: body,
+    })
+  }
+
+  const handleAnalysis = async (file: File, tz: string, nextDayStartAt: number) => {
     setError(null)
     setAnalysis(null)
     setProgressInfo(0)
-    setTz(draftTz)
-    setNextDayStartAt(draftNextDayStartAt)
-    const analysisResult = analyzeCSV(file, draftTz, draftNextDayStartAt)
+    setTz(tz)
+    setNextDayStartAt(nextDayStartAt)
+    clear_short()
+    clear_long()
+    container.body.short_term_params = []
+    container.body.long_term_params = []
+    doneRef.current = [false, false]
+    const analysisResult = analyzeCSV(file, tz, nextDayStartAt)
 
     toast.promise(analysisResult, {
       loading: 'Analyzing CSV...',
       success: (analysisResult) => {
-        setAnalysis(analysisResult)
         if (analysisResult?.fsrs_items.length > 0) {
-          toast.promise(Sleep(2000), {
-            loading: 'Training...',
-          })
+          toast.promise(
+            new Promise<string>((resolve) => {
+              const timeId = setInterval(() => {
+                if (doneRef.current.every((v) => v)) {
+                  clearInterval(timeId)
+                  resolve('Training completed')
+                }
+              }, 500)
+            }),
+            {
+              loading: 'Training...',
+              success: (data) => data,
+              error: (data) => data,
+            },
+          )
+          container.body.tz = tz
+          container.body.nextDayStartAt = nextDayStartAt
+          container.body.total_rows = analysisResult.summary.rowCount
+          container.body.total_cards = analysisResult.summary.grouped
+          container.body.total_fsrs_items = analysisResult.summary.fsrsItems
+          setAnalysis(analysisResult)
           train_short(analysisResult.fsrs_items)
           train_long(analysisResult.fsrs_items)
         } else {
@@ -80,6 +160,57 @@ export default function Home() {
       },
     })
     setProgressInfo(0)
+  }
+
+  const handleHashChange = async () => {
+    const hash = window.location.hash
+    if (hash.length > 1 && hash.startsWith('#')) {
+      const urlSearch = new URLSearchParams(hash.slice(1))
+      const hashObject = HashObject.safeParse({
+        csv: urlSearch.get('csv') || '',
+        tz: urlSearch.get('tz') || currentTz,
+        nextDayStartAt: +(urlSearch.get('nextDayStartAt') || 4),
+        callback: urlSearch.get('callback') || undefined,
+      })
+      if (hashObject.success) {
+        setTz(hashObject.data.tz)
+        setDraftTz(hashObject.data.tz)
+        setNextDayStartAt(hashObject.data.nextDayStartAt)
+        setDraftNextDayStartAt(hashObject.data.nextDayStartAt)
+        if (hashObject.data.callback) {
+          container.url = hashObject.data.callback
+        }
+        toast.promise(
+          client.api.support.redirect
+            .$get({
+              query: {
+                url: hashObject.data.csv,
+              },
+            })
+            .then((resp) => resp.blob()),
+          {
+            loading: 'Fetching CSV...',
+            success: async (blob) => {
+              const file = new File([blob], 'file.csv')
+              handleAnalysis(file, hashObject.data.tz, hashObject.data.nextDayStartAt)
+              return 'CSV Fetched'
+            },
+            error: 'Failed to fetch CSV',
+          },
+        )
+      }
+    }
+  }
+
+  const onDrop = async (acceptedFiles: File[]) => {
+    const file = acceptedFiles[0]
+    if (!file) return
+
+    if (!file.name.endsWith('.csv')) {
+      setError('Please upload a CSV file')
+      return
+    }
+    await handleAnalysis(file, draftTz, draftNextDayStartAt)
   }
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
