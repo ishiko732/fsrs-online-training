@@ -6,6 +6,7 @@ import AnalysisForm from '@components/Analysis'
 import CopyParams from '@components/CopyParams'
 import DemoCSV from '@components/Demo-csv'
 import ErrorForm from '@components/Error'
+import { BASE_URL } from '@components/lib/deploy.url'
 import { currentTz, get_timezone_offset } from '@components/lib/tz'
 import TimezoneSelector from '@components/timezones'
 import { Input } from '@components/ui/input'
@@ -21,7 +22,7 @@ import { toast } from 'sonner'
 
 import { AppType } from '@/app/api/[[...route]]/route'
 
-const client = hc<AppType>(process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_VERCEL_URL || 'http://localhost:3000' /** default */)
+const client = hc<AppType>(BASE_URL())
 
 const container: TCallback = {
   url: '',
