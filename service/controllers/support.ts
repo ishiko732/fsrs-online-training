@@ -25,9 +25,9 @@ export type TCallback = z.infer<typeof Callback>
 const SupportApp = new Hono()
   .use(
     cors({
-      origin: ['https://fsrs.parallelveil.com/'],
+      origin: '*',
       allowMethods: ['POST', 'GET', 'OPTIONS'],
-      exposeHeaders: ['Content-Length', 'Content-Type'],
+      exposeHeaders: ['Content-Length', 'Content-Type', 'Authorization'],
       maxAge: 600,
       credentials: true,
     }),

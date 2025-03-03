@@ -74,6 +74,7 @@ export default function Home() {
   })
   const initdRef = useRef([false, false])
   const doneRef = useRef([false, false])
+  const callbackOnClientRef = useRef(false)
 
   const analyzeCSV = useAnalyze({ setError, setProgressInfo })
 
@@ -104,8 +105,18 @@ export default function Home() {
   }
 
   const handleCallback = (body: TCallback) => {
-    return client.api.support.callback.$post({
-      json: body,
+    if (!callbackOnClientRef.current) {
+      return client.api.support.callback.$post({
+        json: body,
+      })
+    }
+    return fetch(container.url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(20000 /* 20s */),
     })
   }
 
@@ -161,15 +172,30 @@ export default function Home() {
     setProgressInfo(0)
   }
 
+  const handleFetch = async (csv: string, fetchOnClient: boolean) => {
+    if (fetchOnClient) {
+      return fetch(csv).then((resp) => resp.blob())
+    }
+    return client.api.support.redirect
+      .$get({
+        query: {
+          url: csv,
+        },
+      })
+      .then((resp) => resp.blob())
+  }
+
   const handleHashChange = async () => {
     const hash = window.location.hash
     if (hash.length > 1 && hash.startsWith('#')) {
       const urlSearch = new URLSearchParams(hash.slice(1))
       const hashObject = HashObject.safeParse({
         csv: urlSearch.get('csv') || '',
+        fetchOnClient: urlSearch.get('fetchOnClient') === '1',
         tz: urlSearch.get('tz') || currentTz,
         nextDayStartAt: +(urlSearch.get('nextDayStartAt') || 4),
         callback: urlSearch.get('callback') || undefined,
+        callbackOnClient: urlSearch.get('callbackOnClient') === '1',
       })
       if (hashObject.success) {
         setTz(hashObject.data.tz)
@@ -178,25 +204,17 @@ export default function Home() {
         setDraftNextDayStartAt(hashObject.data.nextDayStartAt)
         if (hashObject.data.callback) {
           container.url = hashObject.data.callback
+          callbackOnClientRef.current = hashObject.data.callbackOnClient
         }
-        toast.promise(
-          client.api.support.redirect
-            .$get({
-              query: {
-                url: hashObject.data.csv,
-              },
-            })
-            .then((resp) => resp.blob()),
-          {
-            loading: 'Fetching CSV...',
-            success: async (blob) => {
-              const file = new File([blob], 'file.csv')
-              handleAnalysis(file, hashObject.data.tz, hashObject.data.nextDayStartAt)
-              return 'CSV Fetched'
-            },
-            error: 'Failed to fetch CSV',
+        toast.promise(handleFetch(hashObject.data.csv, hashObject.data.fetchOnClient), {
+          loading: 'Fetching CSV...',
+          success: async (blob) => {
+            const file = new File([blob], 'file.csv')
+            handleAnalysis(file, hashObject.data.tz, hashObject.data.nextDayStartAt)
+            return 'CSV Fetched'
           },
-        )
+          error: 'Failed to fetch CSV',
+        })
       }
     }
   }
