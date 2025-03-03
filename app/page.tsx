@@ -51,6 +51,7 @@ export default function Home() {
     progress: progress_short,
     train: train_short,
     isDone: isDone_short,
+    clear: clear_short,
     train_time: train_time_short,
   } = useTrainFSRS({
     enableShortTerm: true,
@@ -64,6 +65,7 @@ export default function Home() {
     progress: progress_long,
     train: train_long,
     isDone: isDone_long,
+    clear: clear_long,
     train_time: train_time_long,
   } = useTrainFSRS({
     enableShortTerm: false,
@@ -114,6 +116,8 @@ export default function Home() {
     setProgressInfo(0)
     setTz(tz)
     setNextDayStartAt(nextDayStartAt)
+    clear_short()
+    clear_long()
     container.body.short_term_params = []
     container.body.long_term_params = []
     doneRef.current = [false, false]
@@ -122,7 +126,6 @@ export default function Home() {
     toast.promise(analysisResult, {
       loading: 'Analyzing CSV...',
       success: (analysisResult) => {
-        setAnalysis(analysisResult)
         if (analysisResult?.fsrs_items.length > 0) {
           toast.promise(
             new Promise<string>((resolve) => {
@@ -144,6 +147,7 @@ export default function Home() {
           container.body.total_rows = analysisResult.summary.rowCount
           container.body.total_cards = analysisResult.summary.grouped
           container.body.total_fsrs_items = analysisResult.summary.fsrsItems
+          setAnalysis(analysisResult)
           train_short(analysisResult.fsrs_items)
           train_long(analysisResult.fsrs_items)
         } else {

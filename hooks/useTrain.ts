@@ -110,12 +110,20 @@ export default function useTrainFSRS({ enableShortTerm, setError, initdCallback,
     return params.length > 0 && !isTraining
   }
 
+  const clear = () => {
+    setParams([])
+    setProgress(0)
+    setIsTraining(false)
+    setTrain_time(0)
+  }
+
   return {
     params,
     isTraining,
     progress,
     train,
     isDone,
+    clear,
     train_time,
   } as const
 }
