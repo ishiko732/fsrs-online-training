@@ -1,5 +1,6 @@
 import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
+import { cors } from 'hono/cors'
 import { z } from 'zod'
 
 const Redirect = z.object({
@@ -22,6 +23,15 @@ const Callback = z.object({
 export type TCallback = z.infer<typeof Callback>
 
 const SupportApp = new Hono()
+  .use(
+    cors({
+      origin: ['https://fsrs.parallelveil.com/'],
+      allowMethods: ['POST', 'GET', 'OPTIONS'],
+      exposeHeaders: ['Content-Length', 'Content-Type'],
+      maxAge: 600,
+      credentials: true,
+    }),
+  )
   .get('/redirect', zValidator('query', Redirect), async (c) => {
     const { url } = c.req.valid('query')
 
