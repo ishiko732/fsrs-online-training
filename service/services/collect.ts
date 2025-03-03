@@ -46,7 +46,7 @@ export const convertToFSRSItem = (offset_hour: number, next_day_start: number, d
   return items.filter((item) => item.some((review) => review.deltaT > 0))
 }
 
-export const analyze = async (file: File, timezone: string, next_day_start: number, signal?: (row: number) => void) => {
+export const analyze = async (file: Papa.LocalFile, timezone: string, next_day_start: number, signal?: (row: number) => void) => {
   // init
   const map = new Map<string | number, ParseData[]>()
   const sampleData: ParseData[] = []
