@@ -55,7 +55,6 @@ export default function useTrainFSRS({ enableShortTerm, setError, initdCallback,
           doneCallback?.(params)
         } else if (progressState.tag === 'initd') {
           console.log('initd')
-          toast(`Model initialized`, { duration: 10000 })
           initdCallback?.()
           initdRef.current = true
         } else if (progressState.tag === 'initd-failed') {

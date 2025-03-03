@@ -1,5 +1,6 @@
 'use client'
 
+import { TCallback } from '@api/controllers/support'
 import { HashObject } from '@api/services/hash_parse'
 import AnalysisForm from '@components/Analysis'
 import CopyParams from '@components/CopyParams'
@@ -15,13 +16,26 @@ import useAnalyze from '@hooks/useAnalyze'
 import useTrainFSRS from '@hooks/useTrain'
 import { hc } from 'hono/client'
 import { FileText, Upload } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { toast } from 'sonner'
 
-import { AppType } from './api/[[...route]]/route'
+import { AppType } from '@/app/api/[[...route]]/route'
 
 export const client = hc<AppType>(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' /** default */)
+
+const container: TCallback = {
+  url: '',
+  body: {
+    tz: '',
+    nextDayStartAt: 0,
+    total_rows: 0,
+    total_cards: 0,
+    total_fsrs_items: 0,
+    short_term_params: [],
+    long_term_params: [],
+  },
+}
 
 export default function Home() {
   const [draftTz, setDraftTz] = useState<string>(currentTz)
@@ -38,7 +52,12 @@ export default function Home() {
     train: train_short,
     isDone: isDone_short,
     train_time: train_time_short,
-  } = useTrainFSRS({ enableShortTerm: true, setError, initdCallback: () => handleInitd(true), doneCallback: () => handleDone(true) })
+  } = useTrainFSRS({
+    enableShortTerm: true,
+    setError,
+    initdCallback: () => handleInitd(true),
+    doneCallback: (params) => handleDone(params, true),
+  })
   const {
     params: params_long,
     isTraining: isTraining_long,
@@ -46,10 +65,14 @@ export default function Home() {
     train: train_long,
     isDone: isDone_long,
     train_time: train_time_long,
-  } = useTrainFSRS({ enableShortTerm: false, setError, initdCallback: () => handleInitd(false), doneCallback: () => handleDone(false) })
+  } = useTrainFSRS({
+    enableShortTerm: false,
+    setError,
+    initdCallback: () => handleInitd(false),
+    doneCallback: (params) => handleDone(params, false),
+  })
   const initdRef = useRef([false, false])
   const doneRef = useRef([false, false])
-  const callbackRef = useRef<string | undefined>(undefined)
 
   const analyzeCSV = useAnalyze({ setError, setProgressInfo })
 
@@ -61,53 +84,38 @@ export default function Home() {
       toast.promise(handleHashChange, {
         loading: 'Check...',
       })
+      toast.info('Both models are initialized')
     }
   }
 
-  const handleDone = useCallback(
-    (enableShortTerm: boolean) => {
-      doneRef.current[enableShortTerm ? 0 : 1] = true
-      const checked = doneRef.current.every((v) => v)
-      debugger
-      if (callbackRef.current && checked) {
-        toast.promise(
-          client.api.support.callback
-            .$post({
-              json: {
-                url: callbackRef.current,
-                body: {
-                  tz,
-                  nextDayStartAt,
-                  total_rows: analysis?.summary.rowCount || 0,
-                  total_cards: analysis?.summary.grouped || 0,
-                  total_fsrs_items: analysis?.summary.fsrsItems || 0,
-                  short_term_params: params_short,
-                  long_term_params: params_long,
-                },
-              },
-            })
-            .then(() => {
-              toast.success('Callback success')
-            })
-            .catch(() => {
-              toast.error('Callback failed')
-            }),
-          {
-            loading: 'Callback...',
-            success: 'Callback success',
-            error: 'Callback failed',
-          },
-        )
-      }
-    },
-    [analysis, nextDayStartAt, params_long, params_short, tz],
-  )
+  const handleDone = (params: number[], enableShortTerm: boolean) => {
+    doneRef.current[enableShortTerm ? 0 : 1] = true
+    const checked = doneRef.current.every((v) => v)
+    container.body[enableShortTerm ? 'short_term_params' : 'long_term_params'] = params
+
+    if (checked && container.url) {
+      toast.promise(handleCallback(container), {
+        loading: 'Callback...',
+        success: 'Callback success',
+        error: 'Callback failed',
+      })
+    }
+  }
+
+  const handleCallback = (body: TCallback) => {
+    return client.api.support.callback.$post({
+      json: body,
+    })
+  }
+
   const handleAnalysis = async (file: File, tz: string, nextDayStartAt: number) => {
     setError(null)
     setAnalysis(null)
     setProgressInfo(0)
     setTz(tz)
     setNextDayStartAt(nextDayStartAt)
+    container.body.short_term_params = []
+    container.body.long_term_params = []
     doneRef.current = [false, false]
     const analysisResult = analyzeCSV(file, tz, nextDayStartAt)
 
@@ -116,9 +124,26 @@ export default function Home() {
       success: (analysisResult) => {
         setAnalysis(analysisResult)
         if (analysisResult?.fsrs_items.length > 0) {
-          toast.promise(Sleep(2000), {
-            loading: 'Training...',
-          })
+          toast.promise(
+            new Promise<string>((resolve) => {
+              const timeId = setInterval(() => {
+                if (doneRef.current.every((v) => v)) {
+                  clearInterval(timeId)
+                  resolve('Training completed')
+                }
+              }, 500)
+            }),
+            {
+              loading: 'Training...',
+              success: (data) => data,
+              error: (data) => data,
+            },
+          )
+          container.body.tz = tz
+          container.body.nextDayStartAt = nextDayStartAt
+          container.body.total_rows = analysisResult.summary.rowCount
+          container.body.total_cards = analysisResult.summary.grouped
+          container.body.total_fsrs_items = analysisResult.summary.fsrsItems
           train_short(analysisResult.fsrs_items)
           train_long(analysisResult.fsrs_items)
         } else {
@@ -149,19 +174,26 @@ export default function Home() {
         setNextDayStartAt(hashObject.data.nextDayStartAt)
         setDraftNextDayStartAt(hashObject.data.nextDayStartAt)
         if (hashObject.data.callback) {
-          callbackRef.current = hashObject.data.callback
+          container.url = hashObject.data.callback
         }
-        client.api.support.redirect
-          .$get({
-            query: {
-              url: hashObject.data.csv,
+        toast.promise(
+          client.api.support.redirect
+            .$get({
+              query: {
+                url: hashObject.data.csv,
+              },
+            })
+            .then((resp) => resp.blob()),
+          {
+            loading: 'Fetching CSV...',
+            success: async (blob) => {
+              const file = new File([blob], 'file.csv')
+              handleAnalysis(file, hashObject.data.tz, hashObject.data.nextDayStartAt)
+              return 'CSV Fetched'
             },
-          })
-          .then(async (resp) => {
-            const blob = await resp.blob()
-            const file = new File([blob], 'file.csv')
-            handleAnalysis(file, hashObject.data.tz, hashObject.data.nextDayStartAt)
-          })
+            error: 'Failed to fetch CSV',
+          },
+        )
       }
     }
   }

@@ -19,6 +19,8 @@ const Callback = z.object({
   }),
 })
 
+export type TCallback = z.infer<typeof Callback>
+
 const SupportApp = new Hono()
   .get('/redirect', zValidator('query', Redirect), async (c) => {
     const { url } = c.req.valid('query')
