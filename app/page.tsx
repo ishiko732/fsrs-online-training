@@ -6,7 +6,6 @@ import AnalysisForm from '@components/Analysis'
 import CopyParams from '@components/CopyParams'
 import DemoCSV from '@components/Demo-csv'
 import ErrorForm from '@components/Error'
-import { Sleep } from '@components/lib/time'
 import { currentTz, get_timezone_offset } from '@components/lib/tz'
 import TimezoneSelector from '@components/timezones'
 import { Input } from '@components/ui/input'
@@ -22,7 +21,7 @@ import { toast } from 'sonner'
 
 import { AppType } from '@/app/api/[[...route]]/route'
 
-export const client = hc<AppType>(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' /** default */)
+const client = hc<AppType>(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' /** default */)
 
 const container: TCallback = {
   url: '',
