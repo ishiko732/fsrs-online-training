@@ -24,6 +24,21 @@ function dateDiffInDays(_a: number, _b: number) {
   return Math.floor((utc2 - utc1) / _MS_PER_DAY)
 }
 
+const removeRevlogBeforeLastLearning = (entries: ParseData[]): ParseData[] => {
+  const isLearningState = (entry: ParseData) => Number(entry.review_state) === 1
+
+  let lastLearningBlockStart = -1
+  for (let i = entries.length - 1; i >= 0; i--) {
+    if (isLearningState(entries[i])) {
+      lastLearningBlockStart = i
+    } else if (lastLearningBlockStart !== -1) {
+      break
+    }
+  }
+
+  return lastLearningBlockStart !== -1 ? entries.slice(lastLearningBlockStart) : []
+}
+
 export const convertToFSRSItem = (offset_hour: number, next_day_start: number, datum: ParseData[]): FSRSItem[] => {
   const history = datum
     .map((data) => [convertTime(data.review_time, offset_hour /** TODO */, next_day_start), parseInt(data.review_rating)])
@@ -89,7 +104,10 @@ export const analyze = async (file: Papa.LocalFile, timezone: string, next_day_s
       },
       complete: () => {
         const fields = sampleData.length > 0 ? (Object.keys(sampleData?.[0]) ?? []) : []
-        const fsrs_items: FSRSItem[] = Array.from(map.values()).flatMap((item) => convertToFSRSItem(offset_hour, next_day_start, item))
+        const fsrs_items: FSRSItem[] = Array.from(map.values())
+          .map((item) => removeRevlogBeforeLastLearning(item))
+          .filter((item) => item.length > 0)
+          .flatMap((item) => convertToFSRSItem(offset_hour, next_day_start, item))
         const cost_time = performance.now() - start
         resolve({
           fields: fields,
