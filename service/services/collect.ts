@@ -12,7 +12,13 @@ const convertTime = (time: string, timezone: number, next_day_start: number): nu
   const date = parseInt(time)
   const tz = clamp(timezone, -23, 23)
   const nds = clamp(next_day_start, 0, 23)
-
+  if (typeof window !== 'undefined') {
+    // client side
+    const curOffset = new Date(date).getTimezoneOffset() / 60
+    return date + (tz + curOffset) * _MS_PER_HOUR - nds * _MS_PER_HOUR
+  }
+  // server side
+  // because the server side is UTC+0, so we need to add the timezone offset
   return date + tz * _MS_PER_HOUR - nds * _MS_PER_HOUR
 }
 
