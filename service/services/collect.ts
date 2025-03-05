@@ -1,12 +1,11 @@
 import { get_timezone_offset } from '@components/lib/tz'
 import Papa from 'papaparse'
+import { clamp, State } from 'ts-fsrs'
 
 import type { AnalyzeCSVResult, FSRSItem, FSRSReview, ParseData } from './types'
 
 const _MS_PER_HOUR = 1000 * 60 * 60
 const _MS_PER_DAY = _MS_PER_HOUR * 24
-
-const clamp = (x: number, min: number, max: number) => Math.min(Math.max(x, min), max)
 
 const convertTime = (time: string, timezone: number, next_day_start: number): number => {
   const date = parseInt(time)
@@ -25,7 +24,7 @@ function dateDiffInDays(_a: number, _b: number) {
 }
 
 const removeRevlogBeforeLastLearning = (entries: ParseData[]): ParseData[] => {
-  const isLearningState = (entry: ParseData) => Number(entry.review_state) === 1
+  const isLearningState = (entry: ParseData) => [State.New, State.Learning].includes(Number(entry.review_state))
 
   let lastLearningBlockStart = -1
   for (let i = entries.length - 1; i >= 0; i--) {
