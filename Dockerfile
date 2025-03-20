@@ -32,11 +32,12 @@ COPY . .
 # Uncomment the following line in case you want to disable telemetry during the build.
 # ENV NEXT_TELEMETRY_DISABLED=1
 RUN \
-    if [ -f yarn.lock ]; then yarn run build; \
-    elif [ -f package-lock.json ]; then npm run build; \
-    elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm i && NEXT_PRIVATE_STANDALONE=true pnpm run build; \
+    if [ -f yarn.lock ]; then yarn run build && yarn install --prod; \
+    elif [ -f package-lock.json ]; then npm run build && npm install --prod; \
+    elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm i && NEXT_PRIVATE_STANDALONE=true pnpm run build&& pnpm install --prod; \
     else echo "Lockfile not found." && exit 1; \
     fi
+
 
 # Production image, copy all the files and run next
 FROM base AS runner
@@ -48,6 +49,7 @@ WORKDIR /app
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/public ./public
 
 # Automatically leverage output traces to reduce image size
