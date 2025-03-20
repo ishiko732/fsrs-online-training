@@ -47,9 +47,6 @@ importers:
       fsrs-rs-nodejs:
         specifier: ^0.8.1
         version: 0.8.1
-      fsrs-rs-nodejs-darwin-arm64:
-        specifier: ^0.8.1
-        version: 0.8.1
       hono:
         specifier: ^4.7.2
         version: 4.7.2
@@ -2125,6 +2122,7 @@ packages:
   fsrs-rs-nodejs-darwin-arm64@0.8.1:
     resolution: {integrity: sha512-PPkTDxMX4Lc2+eIi7H1Wg5D8jk24co6NHmvF1EtgoUh5t/V7wV0JydMJKBvxWg5psyKW12QMAr/3KdgXBLa8JA==}
     engines: {node: '>= 10'}
+    cpu: [arm64]
     os: [darwin]
 
   fsrs-rs-nodejs-darwin-x64@0.8.1:
@@ -5608,7 +5606,8 @@ snapshots:
   fsrs-rs-nodejs-android-arm64@0.8.1:
     optional: true
 
-  fsrs-rs-nodejs-darwin-arm64@0.8.1: {}
+  fsrs-rs-nodejs-darwin-arm64@0.8.1:
+    optional: true
 
   fsrs-rs-nodejs-darwin-x64@0.8.1:
     optional: true
