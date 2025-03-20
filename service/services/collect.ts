@@ -128,7 +128,7 @@ export const analyze = async (file: Papa.LocalFile, timezone: string, next_day_s
   })
 }
 
-export const analyzeCSV = async (file: File, timezone: string, next_day_start: number) => {
+export const analyzeCSV = async (file: Papa.LocalFile, timezone: string, next_day_start: number) => {
   try {
     return await analyze(file, timezone, next_day_start)
   } catch (e) {
