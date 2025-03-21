@@ -33,11 +33,12 @@ jobs:
       - name: Copy build output to Docker context
         run: |
           mkdir dist
-          cp -r .next/standalone dist/
-          cp -r .next/static dist/.next/
+          cp -r .next/standalone/* dist/
+          cp -r .next/static dist/
           cp -r public dist/
           cp package.json dist/
           cp README.md dist/
+          pnpm install --prod
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Login to GitHub Container Registry
