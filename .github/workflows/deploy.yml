@@ -17,29 +17,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Set up Node.js and pnpm
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: 'pnpm'
-
-      - name: install deps
-        run: |
-          pnpm install
-          NEXT_PRIVATE_STANDALONE=true pnpm run build
-      - name: Copy build output to Docker context
-        run: |
-          mkdir dist
-          cp -a .next/static .next/standalone/
-          cp -a .next/standalone/. dist/
-          cp -r public dist/
-          cp package.json dist/
-          cp README.md dist/
-          pnpm install --prod
-          cp -a node_modules dist/
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Login to GitHub Container Registry
@@ -51,8 +28,8 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: ./dist
-          file: Dockerfile.ci
+          context: .
+          file: Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: |

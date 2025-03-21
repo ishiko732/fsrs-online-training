@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "postinstall": "node ./postinstall.js && node ./search-package.js"
+    "postinstall": "node ./scripts/postinstall.js && node ./scripts/search-package.js"
   },
   "dependencies": {
     "@hono/zod-validator": "^0.4.3",

@@ -1,10 +1,14 @@
 import fs from 'fs'
 import path from 'path'
 
+if (process.env.NODE_ENV === 'production') {
+  process.exit(0)
+}
+
 const __dirname = path.dirname(new URL(import.meta.url).pathname)
 
 // 读取 .wasm 文件并转换为 Base64
-const wasmPath = path.join(__dirname, 'node_modules', 'fsrs-browser', 'fsrs_browser_bg.wasm')
+const wasmPath = path.join(__dirname, '..', 'node_modules', 'fsrs-browser', 'fsrs_browser_bg.wasm')
 const wasmBuffer = fs.readFileSync(wasmPath)
 const wasmBase64 = wasmBuffer.toString('base64')
 
@@ -36,7 +40,7 @@ fs.writeFileSync(outputPath, wasmTsContent)
 console.log(`Successfully converted fsrs_browser_bg.wasm to Base64 and wrote to service/services/wasm.ts`)
 
 const timezones = Intl.supportedValuesOf('timeZone')
-const timeZoneOutputPath = path.join(__dirname, 'components', 'lib', 'timezones.ts')
+const timeZoneOutputPath = path.join(__dirname, '..', 'components', 'lib', 'timezones.ts')
 const timeZoneOutputDirPath = path.dirname(timeZoneOutputPath)
 if (!fs.existsSync(timeZoneOutputDirPath)) {
   fs.mkdirSync(timeZoneOutputDirPath, { recursive: true })
