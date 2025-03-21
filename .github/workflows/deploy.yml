@@ -17,11 +17,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9.15.0
-          run_install: false
+      - name: Enable Corepack
+        run: corepack enable
 
       - name: Set up Node.js and pnpm
         uses: actions/setup-node@v4
@@ -29,9 +26,8 @@ jobs:
           node-version: 22
           cache: 'pnpm'
 
-      - name: Enable Corepack and install deps
+      - name: install deps
         run: |
-          corepack enable
           pnpm install --no-frozen-lockfile
           NEXT_PRIVATE_STANDALONE=true pnpm run build
       - name: Copy build output to Docker context
@@ -57,4 +53,4 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/fsrs-online-training:${{ inputs.version || github.ref_name }}
             cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha
