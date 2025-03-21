@@ -28,7 +28,7 @@ jobs:
 
       - name: install deps
         run: |
-          pnpm install --no-frozen-lockfile
+          pnpm install
           NEXT_PRIVATE_STANDALONE=true pnpm run build
       - name: Copy build output to Docker context
         run: |
