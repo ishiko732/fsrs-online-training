@@ -1,3 +1,13 @@
+---
+title: FSRS Online Training
+emoji: 🧠
+colorFrom: indigo
+colorTo: pink
+sdk: docker
+pinned: false
+---
+
+
 # How to use ?
 
 open https://optimizer.parallelveil.com
