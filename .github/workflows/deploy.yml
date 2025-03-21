@@ -1,0 +1,50 @@
+name: Deploy to Docker Registry
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Docker image tag (e.g., v1.2.3)'
+        required: true
+        default: 'latest'
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js and pnpm
+        uses: actions/setup-node@v3
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      - name: Enable Corepack and install deps
+        run: |
+          corepack enable
+          pnpm install
+          NEXT_PRIVATE_STANDALONE=true &&pnpm run build
+      - name: Copy build output to Docker context
+        run: |
+          mkdir dist
+          cp -r .next/standalone dist/
+          cp -r .next/static dist/.next/
+          cp -r public dist/
+          cp package.json dist/
+          cp README.md dist/
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./dist
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/fsrs-online-training:${{ inputs.version || github.ref_name }}
