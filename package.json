@@ -21,7 +21,7 @@
     "@sentry/nextjs": "^9",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "cmdk": "1.0.0",
+    "cmdk": "1.1.1",
     "fsrs-browser": "^2.0.4",
     "fsrs-rs-nodejs": "^0.8.1",
     "hono": "^4.7.2",
