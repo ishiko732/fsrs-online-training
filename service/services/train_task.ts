@@ -50,15 +50,23 @@ export async function trainByFormData<Ctx extends Context>(c: Ctx, formData: TTr
   start = performance.now()
   const result = await analyzeCSV(stream, formData.timezone, formData.hour_offset)
   message_queue.push({
-    data: JSON.stringify({ type: `File analysis`, ms: +(performance.now() - start).toFixed(3) }),
+    data: JSON.stringify({
+      type: `File analysis`,
+      ms: +(performance.now() - start).toFixed(3),
+      data: result.summary,
+      fields: result.fields,
+    }),
     event: 'info',
     id: 'file-analysis',
   })
 
   const sseEnabled = formData.sse
   if (!sseEnabled) {
-    const train = await trainTask(true, result.fsrs_items)
-    return c.json({ train }, 200)
+    const train = await trainTask(formData.enable_short_term, result.fsrs_items)
+    const w = train.map((t) => +t.toFixed(8))
+    const params = generatorParameters({ w, enable_short_term: formData.enable_short_term })
+
+    return c.json({ params }, 200)
   }
   return streamSSE(c, async (stream) => {
     async function progress(enableShortTerm: boolean, err: Error | null, progressValue: ProgressValue) {
@@ -91,10 +99,23 @@ export async function trainByFormData<Ctx extends Context>(c: Ctx, formData: TTr
     })
 
     const w = train.map((t) => +t.toFixed(8))
+    const params = generatorParameters({ w, enable_short_term: formData.enable_short_term })
     await stream.writeSSE({
-      data: JSON.stringify(generatorParameters({ w, enable_short_term: formData.enable_short_term })),
+      data: JSON.stringify({params}),
       event: 'done',
       id: `done`,
     })
   })
 }
+
+// TODO
+// export async function evaluate(optimizedParameters: number[], fsrsItems: FSRSItem[]) {
+//   const model = new FSRS(optimizedParameters)
+//   return new Promise((resolve, reject) => {
+//     try {
+//       resolve(model.evaluate(fsrsItems))
+//     } catch (error) {
+//       reject(error)
+//     }
+//   })
+// }
