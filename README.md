@@ -33,3 +33,17 @@ export interface HashParseRequest {
   callbackOnClient: '1' | '0'
 }
 ```
+
+## Service-Side
+
+```bash
+curl --location 'https://ishiko732-fsrs-online-training.hf.space/api/train' \
+--header 'Authorization: Token f7e84b54445cd116534d69586e20e820d306f091' \
+--form 'file=@"/Users/ishiko/code/fsrs-rs-nodejs/revlog.csv"' \
+--form 'sse="1"' \
+--form 'hour_offset="4"' \
+--form 'enable_short_term="0"' \
+--form 'timezone="Asia/Shanghai"'
+```
+
+![alt text](images/image.png)
