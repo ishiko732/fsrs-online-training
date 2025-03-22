@@ -11,7 +11,7 @@ export const TrainFormData = z.object({
   hour_offset: z
     .string()
     .optional()
-    .transform((v) => Math.max(23, Math.min(0, Number(v ?? 4)))),
+    .transform((v) => Math.min(23, Math.max(0, Number(v ?? 4)))),
   sse: z
     .string()
     .transform((v) => v === '1')

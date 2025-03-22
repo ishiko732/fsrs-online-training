@@ -28,11 +28,19 @@ async function computeParametersWrapper(enableShortTerm: boolean, fsrsItems: FSR
   return optimizedParameters
 }
 
-export async function trainTask(enableShortTerm: boolean, fsrsItems: BasicFSRSItem[], progress: ProgressFunction = basicProgress) {
-  const fsrs_items = fsrsItems.map(
-    (item: BasicFSRSItem) => new FSRSItem(item.map((review) => new FSRSReview(review.rating, review.deltaT))),
-  )
-  return computeParametersWrapper(enableShortTerm, fsrs_items, progress)
+export async function trainTask(enableShortTerm: boolean, fsrsItems: FSRSItem[], progress: ProgressFunction = basicProgress) {
+  return computeParametersWrapper(enableShortTerm, fsrsItems, progress)
+}
+
+export async function evaluate(optimizedParameters: number[], fsrsItems: FSRSItem[]) {
+  const model = new FSRS(optimizedParameters)
+  return new Promise((resolve, reject) => {
+    try {
+      resolve(model.evaluate(fsrsItems))
+    } catch (error) {
+      reject(error)
+    }
+  })
 }
 
 export async function trainByFormData<Ctx extends Context>(c: Ctx, formData: TTrainFormData) {
@@ -60,13 +68,17 @@ export async function trainByFormData<Ctx extends Context>(c: Ctx, formData: TTr
     id: 'file-analysis',
   })
 
+  const fsrs_items = result.fsrs_items.map(
+    (item: BasicFSRSItem) => new FSRSItem(item.map((review) => new FSRSReview(review.rating, review.deltaT))),
+  )
   const sseEnabled = formData.sse
   if (!sseEnabled) {
-    const train = await trainTask(formData.enable_short_term, result.fsrs_items)
+    const train = await trainTask(formData.enable_short_term, fsrs_items)
     const w = train.map((t) => +t.toFixed(8))
+    const metrics = await evaluate(w, fsrs_items)
     const params = generatorParameters({ w, enable_short_term: formData.enable_short_term })
 
-    return c.json({ params }, 200)
+    return c.json({ params, metrics }, 200)
   }
   return streamSSE(c, async (stream) => {
     async function progress(enableShortTerm: boolean, err: Error | null, progressValue: ProgressValue) {
@@ -90,7 +102,7 @@ export async function trainByFormData<Ctx extends Context>(c: Ctx, formData: TTr
       await stream.writeSSE(message)
     }
     start = performance.now()
-    const train = await trainTask(formData.enable_short_term, result.fsrs_items, progress)
+    const train = await trainTask(formData.enable_short_term, fsrs_items, progress)
 
     await stream.writeSSE({
       data: JSON.stringify({ type: `Train`, ms: +(performance.now() - start).toFixed(3) }),
@@ -99,23 +111,20 @@ export async function trainByFormData<Ctx extends Context>(c: Ctx, formData: TTr
     })
 
     const w = train.map((t) => +t.toFixed(8))
+
+    start = performance.now()
+    const metrics = await evaluate(w, fsrs_items)
+    await stream.writeSSE({
+      data: JSON.stringify({ type: `Evaluate`, ms: +(performance.now() - start).toFixed(3), metrics }),
+      event: 'info',
+      id: 'evaluate-time',
+    })
+
     const params = generatorParameters({ w, enable_short_term: formData.enable_short_term })
     await stream.writeSSE({
-      data: JSON.stringify({params}),
+      data: JSON.stringify({ params, metrics }),
       event: 'done',
       id: `done`,
     })
   })
 }
-
-// TODO
-// export async function evaluate(optimizedParameters: number[], fsrsItems: FSRSItem[]) {
-//   const model = new FSRS(optimizedParameters)
-//   return new Promise((resolve, reject) => {
-//     try {
-//       resolve(model.evaluate(fsrsItems))
-//     } catch (error) {
-//       reject(error)
-//     }
-//   })
-// }
