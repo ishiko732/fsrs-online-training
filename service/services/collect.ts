@@ -1,3 +1,4 @@
+import { loggerDebug, loggerInfo } from '@api/utils/logger'
 import { get_timezone_offset } from '@components/lib/tz'
 import Papa from 'papaparse'
 import { clamp, State } from 'ts-fsrs'
@@ -68,8 +69,11 @@ export const analyze = async (file: Papa.LocalFile, timezone: string, next_day_s
 
   const start = performance.now()
   const offset_hour = Math.floor(get_timezone_offset(timezone) / 60)
-  console.log(`[timezone:${timezone}]offset_hour: ${offset_hour} next_day_start: ${next_day_start}`)
-  console.log(`signal is ${typeof signal === 'function' ? 'enabled' : 'disabled'}`)
+  loggerInfo(`analyze`, {
+    timezone,
+    offset_hour,
+    next_day_start,
+  })
   return new Promise<AnalyzeCSVResult>((resolve, reject) => {
     Papa.parse<ParseData>(file, {
       header: true,
@@ -95,7 +99,9 @@ export const analyze = async (file: Papa.LocalFile, timezone: string, next_day_s
         }
 
         if (typeof signal === 'function' && rows % 500 /** 500row */ === 0) {
-          console.debug(`[analyze] row: ${rows}`)
+          loggerDebug(`analyze-row`, {
+            rows,
+          })
           requestAnimationFrame(() => {
             signal(rows)
           })
