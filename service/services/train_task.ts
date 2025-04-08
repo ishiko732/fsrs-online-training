@@ -100,6 +100,10 @@ export async function trainByFormData<Ctx extends Context>(c: Ctx, formData: TTr
         event: 'progress',
         id: `${enableShortTerm ? 'short' : 'long'}-term-${progressValue.percent}`,
       })
+      loggerInfo('progress', {
+        enableShortTerm,
+        progressValue,
+      })
     }
 
     for (const message of message_queue) {
