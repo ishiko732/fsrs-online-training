@@ -1,4 +1,17 @@
-import { z } from 'zod'
+import { z, ZodIssueCode } from 'zod'
+
+
+export const WeightSchema = z.string().transform((s, ctx) => {
+  const result = s.replace('[', '').replace(']', '').split(',').map(Number)
+  if (result.some(isNaN)) {
+    ctx.addIssue({
+      code: ZodIssueCode.custom,
+      message: 'Invalid number in array',
+    })
+    return z.NEVER
+  }
+  return result
+})
 
 export const TrainFormData = z.object({
   file: z.instanceof(File),
@@ -22,7 +35,7 @@ export const TrainFormData = z.object({
 export const EvaluateFormData = z.object({
   file: z.instanceof(File),
   timezone: z.string().optional().default('Asia/Shanghai'),
-  w: z.string().transform((s) => s.replace('[', '').replace(']', '').split(',').map(Number)),
+  w: WeightSchema,
   hour_offset: z
     .string()
     .optional()
