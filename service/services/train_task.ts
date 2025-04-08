@@ -1,6 +1,7 @@
 'use server'
 // tip: It cannot run on Vercel because it got optimized away.
 import { TEvaluateFormData, TTrainFormData } from '@api/controllers/train.schema'
+import { loggerError, loggerInfo } from '@api/utils/logger'
 import { FSRS, FSRSItem, FSRSReview, type ModelEvaluation } from 'fsrs-rs-nodejs'
 import { Context } from 'hono'
 import { streamSSE } from 'hono/streaming'
@@ -14,10 +15,13 @@ type ProgressFunction = (enableShortTerm: boolean, err: Error | null, progressVa
 
 function basicProgress(enableShortTerm: boolean, err: Error | null, progressValue: ProgressValue) {
   if (err) {
-    console.error(`[enableShortTerm=${enableShortTerm}] Progress callback error:`, err)
+    loggerError(`[enableShortTerm=${enableShortTerm}] Progress callback error`, err)
     return
   }
-  console.log(`[enableShortTerm=${enableShortTerm}] progress value`, progressValue)
+  loggerInfo('progress', {
+    enableShortTerm,
+    progressValue,
+  })
 }
 
 async function computeParametersWrapper(enableShortTerm: boolean, fsrsItems: FSRSItem[], progress: ProgressFunction) {
@@ -96,6 +100,10 @@ export async function trainByFormData<Ctx extends Context>(c: Ctx, formData: TTr
         event: 'progress',
         id: `${enableShortTerm ? 'short' : 'long'}-term-${progressValue.percent}`,
       })
+      loggerInfo('progress', {
+        enableShortTerm,
+        progressValue,
+      })
     }
 
     for (const message of message_queue) {
@@ -154,7 +162,6 @@ export async function evaluateByFormData<Ctx extends Context>(c: Ctx, formData: 
     id: 'file-analysis',
   })
   const { w } = generatorParameters({ w: formData.w })
-  console.log(formData.w,w)
   const fsrs_items = result.fsrs_items.map(
     (item: BasicFSRSItem) => new FSRSItem(item.map((review) => new FSRSReview(review.rating, review.deltaT))),
   )

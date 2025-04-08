@@ -1,5 +1,6 @@
 import { getProgress } from '@api/services/collect'
 import type { FSRSItem, ProgressState } from '@api/services/types'
+import { loggerError, loggerInfo } from '@api/utils/logger'
 import * as Sentry from '@sentry/nextjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
@@ -29,7 +30,7 @@ export default function useTrainFSRS({ enableShortTerm, setError, initdCallback,
 
   useEffect(() => {
     const handlerMessage = (event: MessageEvent<number[] | ProgressState>) => {
-      console.log(event.data)
+      loggerInfo('worker-event', event.data)
       if ('tag' in event.data) {
         // process ProgressState
         const progressState = event.data as ProgressState
@@ -51,14 +52,21 @@ export default function useTrainFSRS({ enableShortTerm, setError, initdCallback,
           setParams(params)
           setIsTraining(false)
           setTrain_time(performance.now() - startTime.current)
-          console.log('finish')
+          loggerInfo('worker-done', {
+            tag:'finish',
+            params
+          })
           doneCallback?.(params)
         } else if (progressState.tag === 'initd') {
-          console.log('initd')
+          loggerInfo('worker-init', {
+            tag:'initd',
+          })
           initdCallback?.()
           initdRef.current = true
         } else if (progressState.tag === 'initd-failed') {
-          console.error('initd-failed')
+          loggerError('worker-failed', {
+            tag:'initd-failed',
+          })
           toast.error(`Model initialization failed`)
           initdRef.current = false
         } else if (progressState.tag === 'error') {
@@ -67,7 +75,7 @@ export default function useTrainFSRS({ enableShortTerm, setError, initdCallback,
           error.name = 'WorkerError'
           Sentry.captureException(error)
           toast.error(`${progressState.error}`)
-          console.error('Unknown progress state:', progressState)
+          loggerError('worker-error', progressState)
         }
       }
     }
