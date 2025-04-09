@@ -129,6 +129,7 @@ export async function trainByFormData<Ctx extends Context>(c: Ctx, formData: TTr
     })
 
     const params = generatorParameters({ w, enable_short_term: formData.enable_short_term })
+    loggerInfo('done', { params, metrics })
     await stream.writeSSE({
       data: JSON.stringify({ params, metrics }),
       event: 'done',
@@ -182,7 +183,7 @@ export async function evaluateByFormData<Ctx extends Context>(c: Ctx, formData: 
       event: 'info',
       id: 'evaluate-time',
     })
-
+    loggerInfo('done', { metrics })
     await stream.writeSSE({
       data: JSON.stringify(metrics),
       event: 'done',
