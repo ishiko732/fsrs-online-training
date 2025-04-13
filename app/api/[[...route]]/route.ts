@@ -1,4 +1,5 @@
 import SupportApp from '@api/controllers/support'
+import { InitGlobalMiddlewares } from '@api/middlewares/global'
 // import TrainApp from '@api/controllers/train'
 import { Hono } from 'hono'
 import { handle } from 'hono/vercel'
@@ -7,9 +8,11 @@ import { handle } from 'hono/vercel'
 // import { createRequire } from "node:module";
 // export const runtime = 'edge'
 
-const app = new Hono().basePath('/api').notFound(async (c) => {
-  return c.json({ error: 'Not found' }, 404)
-})
+const app = InitGlobalMiddlewares(new Hono())
+  .basePath('/api')
+  .notFound(async (c) => {
+    return c.json({ error: 'Not found' }, 404)
+  })
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const routes = app

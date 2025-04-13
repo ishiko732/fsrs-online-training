@@ -1,4 +1,5 @@
 import TrainApp from '@api/controllers/train'
+import { InitGlobalMiddlewares } from '@api/middlewares/global'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { showRoutes } from 'hono/dev'
@@ -8,7 +9,7 @@ import { handle } from 'hono/vercel'
 // import { createRequire } from "node:module";
 // export const runtime = 'edge'
 
-const app = new Hono()
+const app = InitGlobalMiddlewares(new Hono())
   .basePath('/api/train')
   .notFound(async (c) => {
     return c.json({ error: 'Not found' }, 404)
