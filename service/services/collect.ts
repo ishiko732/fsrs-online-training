@@ -138,7 +138,7 @@ export const analyze = async (file: Papa.LocalFile, timezone: string, next_day_s
 
 export const analyzeCSV = async (file: Papa.LocalFile, timezone: string, next_day_start: number) => {
   try {
-    return analyze(file, timezone, next_day_start)
+    return await analyze(file, timezone, next_day_start)
   } catch (e) {
     const error = e as Error
     throw new Error(`Failed to parse CSV: ${error.message}`)
