@@ -114,7 +114,7 @@ export const analyze = async (file: Papa.LocalFile, timezone: string, next_day_s
           .filter((item) => item.length > 0)
           .flatMap((item) => convertToFSRSItem(offset_hour, next_day_start, item))
         const cost_time = performance.now() - start
-        resolve({
+        const result = {
           fields: fields,
           sampleData: sampleData,
           summary: {
@@ -125,7 +125,9 @@ export const analyze = async (file: Papa.LocalFile, timezone: string, next_day_s
             cost_time: cost_time,
           },
           fsrs_items,
-        })
+        }
+        loggerInfo(`analyze-complete`, { summary: result.summary })
+        resolve(result)
       },
       error: (err) => {
         reject(err)

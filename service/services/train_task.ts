@@ -166,6 +166,9 @@ export async function evaluateByFormData<Ctx extends Context>(c: Ctx, formData: 
   const fsrs_items = result.fsrs_items.map(
     (item: BasicFSRSItem) => new FSRSItem(item.map((review) => new FSRSReview(review.rating, review.deltaT))),
   )
+  if (fsrs_items.length === 0) {
+    return c.json({ error: `No valid FSRS items found`, analysis: result }, 400)
+  }
   const sseEnabled = formData.sse
   if (!sseEnabled) {
     const metrics = await evaluate(w, fsrs_items)
