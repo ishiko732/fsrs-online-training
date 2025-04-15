@@ -76,10 +76,13 @@ export async function trainByFormData<Ctx extends Context>(c: Ctx, formData: TTr
     (item: BasicFSRSItem) => new FSRSItem(item.map((review) => new FSRSReview(review.rating, review.deltaT))),
   )
   const sseEnabled = formData.sse
+  let metrics: ModelEvaluation | { logLoss: null; rmseBins: null } = { logLoss: null, rmseBins: null }
   if (!sseEnabled) {
     const train = await trainTask(formData.enable_short_term, fsrs_items)
     const w = train.map((t) => +t.toFixed(8))
-    const metrics = await evaluate(w, fsrs_items)
+    if (fsrs_items.length) {
+      metrics = await evaluate(w, fsrs_items)
+    }
     const params = generatorParameters({ w, enable_short_term: formData.enable_short_term })
 
     return c.json({ params, metrics }, 200)
@@ -121,12 +124,14 @@ export async function trainByFormData<Ctx extends Context>(c: Ctx, formData: TTr
     const w = train.map((t) => +t.toFixed(8))
 
     start = performance.now()
-    const metrics = await evaluate(w, fsrs_items)
-    await stream.writeSSE({
-      data: JSON.stringify({ type: `Evaluate`, ms: +(performance.now() - start).toFixed(3), metrics }),
-      event: 'info',
-      id: 'evaluate-time',
-    })
+    if (fsrs_items.length) {
+      metrics = await evaluate(w, fsrs_items)
+      await stream.writeSSE({
+        data: JSON.stringify({ type: `Evaluate`, ms: +(performance.now() - start).toFixed(3), metrics }),
+        event: 'info',
+        id: 'evaluate-time',
+      })
+    }
 
     const params = generatorParameters({ w, enable_short_term: formData.enable_short_term })
     loggerInfo('done', { params, metrics })
