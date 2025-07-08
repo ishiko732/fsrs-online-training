@@ -176,7 +176,7 @@ export async function evaluateByFormData<Ctx extends Context>(c: Ctx, formData: 
   }
   const sseEnabled = formData.sse
   if (!sseEnabled) {
-    const metrics = await evaluate(w, fsrs_items)
+    const metrics = await evaluate(Array.from(w), fsrs_items)
     return c.json(metrics, 200)
   }
   return streamSSE(c, async (stream) => {
@@ -185,7 +185,7 @@ export async function evaluateByFormData<Ctx extends Context>(c: Ctx, formData: 
     }
     start = performance.now()
     start = performance.now()
-    const metrics = await evaluate(w, fsrs_items)
+    const metrics = await evaluate(Array.from(w), fsrs_items)
     await stream.writeSSE({
       data: JSON.stringify({ type: `Evaluate`, ms: +(performance.now() - start).toFixed(3), metrics }),
       event: 'info',
