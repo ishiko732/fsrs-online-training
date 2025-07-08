@@ -13,7 +13,7 @@ const wasmBuffer = fs.readFileSync(wasmPath)
 const wasmBase64 = wasmBuffer.toString('base64')
 
 // 目标文件路径
-const outputPath = path.join(__dirname, 'service', 'services', 'wasm.ts')
+const outputPath = path.join(__dirname, '..', 'service', 'services', 'wasm.ts')
 
 const dirPath = path.dirname(outputPath)
 if (!fs.existsSync(dirPath)) {
