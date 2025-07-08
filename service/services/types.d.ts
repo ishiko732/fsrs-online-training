@@ -22,6 +22,7 @@ export interface AnalyzeCSVResult {
 export interface FSRSReview {
   rating: number
   deltaT: number
+  time: number
 }
 
 export type FSRSItem = FSRSReview[]
@@ -54,7 +55,7 @@ interface Progress extends ProgressItem {
 }
 
 interface InitdWorker {
-  tag: 'initd'|'initd-failed'
+  tag: 'initd' | 'initd-failed'
 }
 
 interface WorkerErrorInfo {

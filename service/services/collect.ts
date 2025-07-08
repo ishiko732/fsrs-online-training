@@ -51,14 +51,16 @@ export const convertToFSRSItem = (offset_hour: number, next_day_start: number, d
   for (const [time, rating] of history) {
     // const deltaT = Math.floor((time - last_review_time) / _MS_PER_DAY)
     const deltaT = dateDiffInDays(last_review_time, time)
-    reviews.push({ rating, deltaT })
+    reviews.push({ rating, deltaT, time })
     if (deltaT > 0) {
       // the last review is not the same day
       items.push([...reviews])
     }
     last_review_time = time
   }
-  return items.filter((item) => item.some((review) => review.deltaT > 0))
+
+  const longTermReviewCnt = (item: FSRSItem) => item.some((review) => review.deltaT > 0)
+  return items.filter(longTermReviewCnt)
 }
 
 export const analyze = async (file: Papa.LocalFile, timezone: string, next_day_start: number, signal?: (row: number) => void) => {
@@ -113,6 +115,7 @@ export const analyze = async (file: Papa.LocalFile, timezone: string, next_day_s
           .map((item) => removeRevlogBeforeLastLearning(item))
           .filter((item) => item.length > 0)
           .flatMap((item) => convertToFSRSItem(offset_hour, next_day_start, item))
+          .sort((a, b) => a?.[0].time - b?.[0].time)
         const cost_time = performance.now() - start
         const result = {
           fields: fields,
