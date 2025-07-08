@@ -39,8 +39,6 @@ const removeRevlogBeforeLastLearning = (entries: ParseData[]): ParseData[] => {
   return lastLearningBlockStart !== -1 ? entries.slice(lastLearningBlockStart) : []
 }
 
-const longTermReviewCnt = (item: FSRSItem) => item.some((review) => review.deltaT > 0)
-
 export const convertToFSRSItem = (offset_hour: number, next_day_start: number, datum: ParseData[]): FSRSItem[] => {
   const history = datum
     .map((data) => [convertTime(data.review_time, offset_hour /** TODO */, next_day_start), parseInt(data.review_rating)])
@@ -61,6 +59,7 @@ export const convertToFSRSItem = (offset_hour: number, next_day_start: number, d
     last_review_time = time
   }
 
+  const longTermReviewCnt = (item: FSRSItem) => item.some((review) => review.deltaT > 0)
   return items.filter(longTermReviewCnt)
 }
 
