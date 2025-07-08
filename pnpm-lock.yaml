@@ -84,8 +84,8 @@ importers:
         specifier: ^1.0.7
         version: 1.0.7(tailwindcss@4.0.8)
       ts-fsrs:
-        specifier: ^4.x
-        version: 4.6.1
+        specifier: ^5.2.0
+        version: 5.2.0
       zod:
         specifier: ^3.24.2
         version: 3.24.2
@@ -3064,8 +3064,8 @@ packages:
     peerDependencies:
       typescript: '>=4.8.4'
 
-  ts-fsrs@4.6.1:
-    resolution: {integrity: sha512-Etf4uHPpiY9I//T1QmH6AO25xo1orcFOh/chl5bDFbHR5Wyh4JK3wSbvR15iMgPg7B13DFyrSIY8/MwZnGlOng==}
+  ts-fsrs@5.2.0:
+    resolution: {integrity: sha512-r8U9AU+7/EuFmI33rr01ZyP+yNWmuOzMuT2CZk1IbW9SICFLCLicLuXBTBYJ26SVhoqudJ6D2nkdlsw9sCoYEw==}
     engines: {node: '>=18.0.0'}
 
   tsconfig-paths@3.15.0:
@@ -6441,7 +6441,7 @@ snapshots:
     dependencies:
       typescript: 5.7.3
 
-  ts-fsrs@4.6.1: {}
+  ts-fsrs@5.2.0: {}
 
   tsconfig-paths@3.15.0:
     dependencies:
