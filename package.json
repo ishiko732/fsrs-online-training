@@ -22,7 +22,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "1.1.1",
-    "fsrs-browser": "^2.0.4",
+    "fsrs-browser": "4.1.1",
     "fsrs-rs-nodejs": "^0.9.0",
     "hono": "^4.7.2",
     "lucide-react": "^0.475.0",
