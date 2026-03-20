@@ -7,8 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "postinstall": "node ./scripts/postinstall.js && node ./scripts/search-package.js"
+    "lint": "next lint"
   },
   "dependencies": {
     "@hono/zod-validator": "^0.4.3",
@@ -22,8 +21,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "1.1.1",
-    "fsrs-browser": "4.1.1",
-    "fsrs-rs-nodejs": "^0.9.0",
+    "@open-spaced-repetition/binding": "0.2.0",
     "hono": "^4.11.4",
     "lucide-react": "^0.475.0",
     "next": "15.5.10",

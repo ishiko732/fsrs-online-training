@@ -46,7 +46,7 @@ const eslintConfig = [
   },
   eslintConfigPrettier,
   {
-    ignores: ['dist/*', 'search-package.js'],
+    ignores: ['dist/*'],
   },
 ]
 

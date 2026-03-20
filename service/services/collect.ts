@@ -147,12 +147,3 @@ export const analyzeCSV = async (file: Papa.LocalFile, timezone: string, next_da
     throw new Error(`Failed to parse CSV: ${error.message}`)
   }
 }
-
-export function getProgress(wasmMemoryBuffer: ArrayBuffer, pointer: number) {
-  // The progress vec is length 2. Grep 2291AF52-BEE4-4D54-BAD0-6492DFE368D8
-  const progress = new Uint32Array(wasmMemoryBuffer, pointer, 2)
-  return {
-    itemsProcessed: progress[0],
-    itemsTotal: progress[1],
-  }
-}

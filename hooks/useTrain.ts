@@ -1,4 +1,3 @@
-import { getProgress } from '@api/services/collect'
 import type { FSRSItem, ProgressState } from '@api/services/types'
 import { loggerError, loggerInfo } from '@api/utils/logger'
 import * as Sentry from '@sentry/nextjs'
@@ -16,15 +15,13 @@ export default function useTrainFSRS({ enableShortTerm, setError, initdCallback,
   const [progress, setProgress] = useState(0)
   const [isTraining, setIsTraining] = useState(false)
   const workerRef = useRef<Worker>(undefined)
-  const timeIdRef = useRef<NodeJS.Timeout>(undefined)
   const [params, setParams] = useState<number[]>([])
   const startTime = useRef<DOMHighResTimeStamp>(0)
   const [train_time, setTrain_time] = useState<DOMHighResTimeStamp>(0)
   const initdRef = useRef(false)
 
-  const handleProgress = (wasmMemoryBuffer: ArrayBuffer, pointer: number) => {
-    const { itemsProcessed, itemsTotal } = getProgress(wasmMemoryBuffer, pointer)
-    const value = (itemsProcessed / itemsTotal) * 100
+  const handleProgress = (itemsProcessed: number, itemsTotal: number) => {
+    const value = itemsTotal > 0 ? (itemsProcessed / itemsTotal) * 100 : 0
     setProgress(value || 0)
   }
 
@@ -35,19 +32,10 @@ export default function useTrainFSRS({ enableShortTerm, setError, initdCallback,
         // process ProgressState
         const progressState = event.data as ProgressState
         if (progressState.tag === 'start') {
-          const { wasmMemoryBuffer, pointer } = progressState
-          if (wasmMemoryBuffer && pointer) {
-            handleProgress(wasmMemoryBuffer, pointer)
-
-            const timeId = setInterval(() => {
-              handleProgress(wasmMemoryBuffer, pointer)
-            }, 100)
-            timeIdRef.current = timeId
-          } else {
-            toast.warning(`Your browser or device does not support displaying the progress bar.`, { duration: 10000 })
-          }
+          // Training started
+        } else if (progressState.tag === 'progress') {
+          handleProgress(progressState.itemsProcessed, progressState.itemsTotal)
         } else if (progressState.tag === 'finish') {
-          clearInterval(timeIdRef.current)
           const params = [...progressState.parameters]
           setParams(params)
           setIsTraining(false)
