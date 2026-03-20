@@ -1,23 +1,27 @@
 'use server'
-// tip: It cannot run on Vercel because it got optimized away.
 import { TEvaluateFormData, TTrainFormData } from '@api/controllers/train.schema'
-import { loggerError, loggerInfo } from '@api/utils/logger'
+import { loggerInfo } from '@api/utils/logger'
 import {
   computeParameters as bindingComputeParameters,
+  convertCsvToFsrsItems,
   FSRSBinding,
   FSRSBindingItem,
-  FSRSBindingReview,
   type ModelEvaluation,
 } from '@open-spaced-repetition/binding'
 import { Context } from 'hono'
 import { streamSSE } from 'hono/streaming'
-import { Readable } from 'stream'
 import { generatorParameters } from 'ts-fsrs'
 
-import { analyzeCSV } from './collect'
-import { FSRSItem as BasicFSRSItem, ProgressValue } from './types'
+import { ProgressValue } from './types'
 
 type ProgressFunction = (enableShortTerm: boolean, current: number, total: number) => void
+
+function getTimezoneOffset(ms: number, timezone: string): number {
+  const date = new Date(ms)
+  const utcStr = date.toLocaleString('en-US', { timeZone: 'UTC' })
+  const tzStr = date.toLocaleString('en-US', { timeZone: timezone })
+  return (new Date(tzStr).getTime() - new Date(utcStr).getTime()) / 60000
+}
 
 function basicProgress(enableShortTerm: boolean, current: number, total: number) {
   const percent = total > 0 ? Math.round((current / total) * 100) : 0
@@ -61,34 +65,27 @@ export async function evaluate(optimizedParameters: number[], fsrsItems: FSRSBin
   })
 }
 
+async function csvToFsrsItems(file: File, timezone: string, hourOffset: number) {
+  const arrayBuffer = await file.arrayBuffer()
+  const csvData = new Uint8Array(arrayBuffer)
+  return convertCsvToFsrsItems(csvData, hourOffset, timezone, getTimezoneOffset)
+}
+
 export async function trainByFormData<Ctx extends Context>(c: Ctx, formData: TTrainFormData) {
   const message_queue: Array<{ data: string; event: string; id: string }> = []
   let start = performance.now()
-  const arrayBuffer = await formData.file.arrayBuffer()
-  const buffer = Buffer.from(arrayBuffer)
-  const stream = Readable.from(buffer)
 
-  message_queue.push({
-    data: JSON.stringify({ type: `File read`, ms: +(performance.now() - start).toFixed(3) }),
-    event: 'info',
-    id: 'file-read',
-  })
-  start = performance.now()
-  const result = await analyzeCSV(stream, formData.timezone, formData.hour_offset)
+  const fsrs_items = await csvToFsrsItems(formData.file, formData.timezone, formData.hour_offset)
   message_queue.push({
     data: JSON.stringify({
       type: `File analysis`,
       ms: +(performance.now() - start).toFixed(3),
-      data: result.summary,
-      fields: result.fields,
+      fsrsItems: fsrs_items.length,
     }),
     event: 'info',
     id: 'file-analysis',
   })
 
-  const fsrs_items = result.fsrs_items.map(
-    (item: BasicFSRSItem) => new FSRSBindingItem(item.map((review) => new FSRSBindingReview(review.rating, review.deltaT))),
-  )
   const sseEnabled = formData.sse
   let metrics: ModelEvaluation | { logLoss: null; rmseBins: null } = { logLoss: null, rmseBins: null }
   if (!sseEnabled) {
@@ -105,8 +102,6 @@ export async function trainByFormData<Ctx extends Context>(c: Ctx, formData: TTr
     function progress(enableShortTerm: boolean, current: number, total: number) {
       const percent = total > 0 ? Math.round((current / total) * 100) : 0
       const progressValue: ProgressValue = { current, total, percent }
-      // writeSSE is not awaited because the binding's progress callback must be synchronous.
-      // Writes are buffered by the stream and flushed asynchronously.
       stream.writeSSE({
         data: JSON.stringify(progressValue),
         event: 'progress',
@@ -155,33 +150,21 @@ export async function trainByFormData<Ctx extends Context>(c: Ctx, formData: TTr
 export async function evaluateByFormData<Ctx extends Context>(c: Ctx, formData: TEvaluateFormData) {
   const message_queue: Array<{ data: string; event: string; id: string }> = []
   let start = performance.now()
-  const arrayBuffer = await formData.file.arrayBuffer()
-  const buffer = Buffer.from(arrayBuffer)
-  const stream = Readable.from(buffer)
 
-  message_queue.push({
-    data: JSON.stringify({ type: `File read`, ms: +(performance.now() - start).toFixed(3) }),
-    event: 'info',
-    id: 'file-read',
-  })
-  start = performance.now()
-  const result = await analyzeCSV(stream, formData.timezone, formData.hour_offset)
+  const fsrs_items = await csvToFsrsItems(formData.file, formData.timezone, formData.hour_offset)
   message_queue.push({
     data: JSON.stringify({
       type: `File analysis`,
       ms: +(performance.now() - start).toFixed(3),
-      data: result.summary,
-      fields: result.fields,
+      fsrsItems: fsrs_items.length,
     }),
     event: 'info',
     id: 'file-analysis',
   })
+
   const { w } = generatorParameters({ w: formData.w })
-  const fsrs_items = result.fsrs_items.map(
-    (item: BasicFSRSItem) => new FSRSBindingItem(item.map((review) => new FSRSBindingReview(review.rating, review.deltaT))),
-  )
   if (fsrs_items.length === 0) {
-    return c.json({ error: `No valid FSRS items found`, analysis: result }, 400)
+    return c.json({ error: `No valid FSRS items found` }, 400)
   }
   const sseEnabled = formData.sse
   if (!sseEnabled) {

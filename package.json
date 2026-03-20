@@ -11,22 +11,22 @@
   },
   "dependencies": {
     "@hono/zod-validator": "^0.4.3",
+    "@open-spaced-repetition/binding": "https://pkg.pr.new/@open-spaced-repetition/binding@fe71943",
+    "@open-spaced-repetition/binding-wasm32-wasi": "https://pkg.pr.new/@open-spaced-repetition/binding-wasm32-wasi@fe71943",
     "@radix-ui/react-dialog": "^1.1.6",
     "@radix-ui/react-label": "^2.1.2",
     "@radix-ui/react-popover": "^1.1.6",
     "@radix-ui/react-progress": "^1.1.2",
     "@radix-ui/react-select": "^2.1.6",
     "@radix-ui/react-slot": "^1.1.2",
-    "@sentry/nextjs": "^9",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "1.1.1",
-    "@open-spaced-repetition/binding": "0.2.0",
+    "comlink": "^4.4.2",
     "hono": "^4.11.4",
     "lucide-react": "^0.475.0",
-    "next": "15.5.10",
+    "next": "16.2.0",
     "next-themes": "^0.4.4",
-    "papaparse": "^5.5.2",
     "pino": "^9.6.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -42,7 +42,6 @@
     "@next/eslint-plugin-next": "^15.1.7",
     "@tailwindcss/postcss": "^4.0.8",
     "@types/node": "^22.x",
-    "@types/papaparse": "^5.3.15",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
@@ -59,7 +58,13 @@
   "pnpm": {
     "ignoredBuiltDependencies": [
       "sharp"
-    ]
+    ],
+    "supportedArchitectures": {
+      "cpu": [
+        "current",
+        "wasm32"
+      ]
+    }
   },
   "engines": {
     "node:": ">=22",

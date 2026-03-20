@@ -1,32 +1,3 @@
-export interface ParseData {
-  review_time: string
-  card_id: string
-  review_rating: string
-  review_duration: string
-  review_state: string
-}
-
-export interface AnalyzeCSVResult {
-  fields: string[]
-  sampleData: ParseData[]
-  summary: {
-    rowCount: number
-    columnCount: number
-    grouped: number
-    fsrsItems: number
-    cost_time: number
-  }
-  fsrs_items: FSRSItem[]
-}
-
-export interface FSRSReview {
-  rating: number
-  deltaT: number
-  time: number
-}
-
-export type FSRSItem = FSRSReview[]
-
 export interface ProgressValue {
   current: number
   total: number

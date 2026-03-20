@@ -1,5 +1,0 @@
-packages:
-  - "."
-
-supportedArchitectures:
-  cpu: [current, wasm32]

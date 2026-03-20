@@ -1,105 +1,67 @@
-import type { FSRSItem, ProgressState } from '@api/services/types'
+import type { TrainingApi } from '@/workers/training.worker'
 import { loggerError, loggerInfo } from '@api/utils/logger'
-import * as Sentry from '@sentry/nextjs'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import * as Comlink from 'comlink'
+import { useCallback, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 export type TrainFSRSProps = {
   enableShortTerm: boolean
   setError: (error: string) => void
-  initdCallback?: () => void
   doneCallback?: (params: number[]) => void
 }
 
-export default function useTrainFSRS({ enableShortTerm, setError, initdCallback, doneCallback }: TrainFSRSProps) {
+export default function useTrainFSRS({ enableShortTerm, setError, doneCallback }: TrainFSRSProps) {
   const [progress, setProgress] = useState(0)
   const [isTraining, setIsTraining] = useState(false)
-  const workerRef = useRef<Worker>(undefined)
   const [params, setParams] = useState<number[]>([])
+  const [fsrsItems, setFsrsItems] = useState(0)
   const startTime = useRef<DOMHighResTimeStamp>(0)
   const [train_time, setTrain_time] = useState<DOMHighResTimeStamp>(0)
-  const initdRef = useRef(false)
+  const apiRef = useRef<Comlink.Remote<TrainingApi> | null>(null)
 
-  const handleProgress = (itemsProcessed: number, itemsTotal: number) => {
-    const value = itemsTotal > 0 ? (itemsProcessed / itemsTotal) * 100 : 0
-    setProgress(value || 0)
-  }
-
-  useEffect(() => {
-    const handlerMessage = (event: MessageEvent<number[] | ProgressState>) => {
-      loggerInfo('worker-event', event.data)
-      if ('tag' in event.data) {
-        // process ProgressState
-        const progressState = event.data as ProgressState
-        if (progressState.tag === 'start') {
-          // Training started
-        } else if (progressState.tag === 'progress') {
-          handleProgress(progressState.itemsProcessed, progressState.itemsTotal)
-        } else if (progressState.tag === 'finish') {
-          const params = [...progressState.parameters]
-          setParams(params)
-          setIsTraining(false)
-          setTrain_time(performance.now() - startTime.current)
-          loggerInfo('worker-done', {
-            tag:'finish',
-            params
-          })
-          doneCallback?.(params)
-        } else if (progressState.tag === 'initd') {
-          loggerInfo('worker-init', {
-            tag:'initd',
-          })
-          initdCallback?.()
-          initdRef.current = true
-        } else if (progressState.tag === 'initd-failed') {
-          loggerError('worker-failed', {
-            tag:'initd-failed',
-          })
-          toast.error(`Model initialization failed`)
-          initdRef.current = false
-        } else if (progressState.tag === 'error') {
-          setError(progressState.error)
-          const error = new Error(progressState.error)
-          error.name = 'WorkerError'
-          Sentry.captureException(error)
-          toast.error(`${progressState.error}`)
-          loggerError('worker-error', progressState)
-        }
-      }
-    }
-    workerRef.current = new Worker(new URL('@api/services/worker.ts', import.meta.url))
-
-    workerRef.current.onmessage = (event: MessageEvent<number[] | ProgressState>) => {
-      handlerMessage(event)
-    }
-    workerRef.current.onerror = (err) => {
-      Sentry.captureException(err.error || err)
-      setError(err.message)
-    }
-    workerRef.current.postMessage({ init: true })
-
-    return () => {
-      workerRef.current?.terminate()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const train = useCallback(
-    (items: FSRSItem[]) => {
-      // if (!initd) {
-      //   const model = enableShortTerm ? 'Short-Term' : 'Long-Term'
-      //   setError(`Model(${model}) not initialized`)
-      //   toast.error(`Model(${model}) not initialized`)
-      //   return
-      // }
+  const startTrain = useCallback(
+    async (csvData: ArrayBuffer, timezone: string, nextDayStartsAt: number) => {
       setIsTraining(true)
       setProgress(0)
       setParams([])
+      setFsrsItems(0)
       setTrain_time(0)
       startTime.current = performance.now()
-      workerRef.current?.postMessage({ items, enableShortTerm })
+
+      try {
+        if (!apiRef.current) {
+          const worker = new Worker(new URL('../workers/training.worker.ts', import.meta.url), { type: 'module' })
+          apiRef.current = Comlink.wrap<TrainingApi>(worker)
+        }
+
+        const result = await apiRef.current.train(
+          new Uint8Array(csvData),
+          timezone,
+          nextDayStartsAt,
+          enableShortTerm,
+          Comlink.proxy({
+            onProgress: (current: number, total: number) => {
+              const value = total > 0 ? (current / total) * 100 : 0
+              setProgress(value || 0)
+            },
+          }),
+        )
+
+        setParams(result.parameters)
+        setFsrsItems(result.fsrsItems)
+        setIsTraining(false)
+        setTrain_time(performance.now() - startTime.current)
+        loggerInfo('train-done', { tag: 'finish', params: result.parameters, fsrsItems: result.fsrsItems })
+        doneCallback?.(result.parameters)
+      } catch (e) {
+        const error = e as Error
+        setIsTraining(false)
+        setError(error.message)
+        toast.error(`Training failed: ${error.message}`)
+        loggerError('train-error', { error: error.message })
+      }
     },
-    [enableShortTerm],
+    [enableShortTerm, setError, doneCallback],
   )
 
   const isDone = () => {
@@ -108,6 +70,7 @@ export default function useTrainFSRS({ enableShortTerm, setError, initdCallback,
 
   const clear = () => {
     setParams([])
+    setFsrsItems(0)
     setProgress(0)
     setIsTraining(false)
     setTrain_time(0)
@@ -115,9 +78,10 @@ export default function useTrainFSRS({ enableShortTerm, setError, initdCallback,
 
   return {
     params,
+    fsrsItems,
     isTraining,
     progress,
-    train,
+    train: startTrain,
     isDone,
     clear,
     train_time,
