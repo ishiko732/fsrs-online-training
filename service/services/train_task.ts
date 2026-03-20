@@ -105,6 +105,8 @@ export async function trainByFormData<Ctx extends Context>(c: Ctx, formData: TTr
     function progress(enableShortTerm: boolean, current: number, total: number) {
       const percent = total > 0 ? Math.round((current / total) * 100) : 0
       const progressValue: ProgressValue = { current, total, percent }
+      // writeSSE is not awaited because the binding's progress callback must be synchronous.
+      // Writes are buffered by the stream and flushed asynchronously.
       stream.writeSSE({
         data: JSON.stringify(progressValue),
         event: 'progress',

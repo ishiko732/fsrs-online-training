@@ -35,7 +35,7 @@ export async function computeParametersWrapper(items: FSRSItem[], enableShortTer
           itemsTotal: total,
         })
       },
-      timeout: 1000,
+      timeout: 1000, // progress callback polling interval in ms
     })
 
     self.postMessage({
