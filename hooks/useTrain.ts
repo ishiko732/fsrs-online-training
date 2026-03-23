@@ -1,93 +1,119 @@
-import type { TrainingApi } from '@/workers/training.worker'
+import type { TrainMessage, WorkerMessage } from '@/workers/training.worker'
 import { loggerError, loggerInfo } from '@api/utils/logger'
-import * as Comlink from 'comlink'
 import { useCallback, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
-export type TrainFSRSProps = {
-  enableShortTerm: boolean
-  setError: (error: string) => void
-  doneCallback?: (params: number[]) => void
+export type TrainResult = {
+  params: number[]
+  progress: number
 }
 
-export default function useTrainFSRS({ enableShortTerm, setError, doneCallback }: TrainFSRSProps) {
-  const [progress, setProgress] = useState(0)
-  const [isTraining, setIsTraining] = useState(false)
-  const [params, setParams] = useState<number[]>([])
+export type TrainPhase = 'idle' | 'converting' | 'training'
+
+export default function useTrain() {
+  const [phase, setPhase] = useState<TrainPhase>('idle')
+  const [shortTerm, setShortTerm] = useState<TrainResult>({ params: [], progress: 0 })
+  const [longTerm, setLongTerm] = useState<TrainResult>({ params: [], progress: 0 })
   const [fsrsItems, setFsrsItems] = useState(0)
-  const startTime = useRef<DOMHighResTimeStamp>(0)
-  const [train_time, setTrain_time] = useState<DOMHighResTimeStamp>(0)
-  const apiRef = useRef<Comlink.Remote<TrainingApi> | null>(null)
+  const [trainTime, setTrainTime] = useState(0)
+  const workerRef = useRef<Worker | null>(null)
 
   const startTrain = useCallback(
-    async (csvData: ArrayBuffer, timezone: string, nextDayStartsAt: number) => {
-      setIsTraining(true)
-      setProgress(0)
-      setParams([])
+    (csvData: ArrayBuffer, timezone: string, nextDayStartsAt: number): Promise<void> => {
+      setPhase('converting')
+      setShortTerm({ params: [], progress: 0 })
+      setLongTerm({ params: [], progress: 0 })
       setFsrsItems(0)
-      setTrain_time(0)
-      startTime.current = performance.now()
+      setTrainTime(0)
+      const start = performance.now()
 
-      try {
-        if (!apiRef.current) {
-          const workerUrl = new URL('../workers/training.worker.ts', import.meta.url)
-          console.log('[useTrain] Creating worker from:', workerUrl.href)
-          const worker = new Worker(workerUrl, { type: 'module' })
-          worker.onerror = (e) => console.error('[useTrain] Worker error:', e)
-          apiRef.current = Comlink.wrap<TrainingApi>(worker)
+      return new Promise<void>((resolve, reject) => {
+        if (!workerRef.current) {
+          workerRef.current = new Worker(
+            new URL('../workers/training.worker.ts', import.meta.url),
+            { type: 'module' },
+          )
         }
-        console.log('[useTrain] Calling worker.train...')
+        const worker = workerRef.current
 
-        const result = await apiRef.current.train(
-          new Uint8Array(csvData),
-          timezone,
-          nextDayStartsAt,
-          enableShortTerm,
-          Comlink.proxy({
-            onProgress: (current: number, total: number) => {
-              const value = total > 0 ? (current / total) * 100 : 0
-              setProgress(value || 0)
-            },
-          }),
-        )
+        const sendTrainMessage = () => {
+          worker.postMessage(
+            { type: 'train', csvData, timezone, nextDayStartsAt } satisfies TrainMessage,
+            [csvData],
+          )
+        }
 
-        setParams(result.parameters)
-        setFsrsItems(result.fsrsItems)
-        setIsTraining(false)
-        setTrain_time(performance.now() - startTime.current)
-        loggerInfo('train-done', { tag: 'finish', params: result.parameters, fsrsItems: result.fsrsItems })
-        doneCallback?.(result.parameters)
-      } catch (e) {
-        const error = e as Error
-        setIsTraining(false)
-        setError(error.message)
-        toast.error(`Training failed: ${error.message}`)
-        loggerError('train-error', { error: error.message })
-      }
+        worker.onerror = (e) => {
+          setPhase('idle')
+          reject(new Error(e.message))
+        }
+
+        worker.onmessage = (e: MessageEvent<WorkerMessage>) => {
+          const msg = e.data
+          if (!msg || typeof msg !== 'object' || !('type' in msg)) return
+
+          switch (msg.type) {
+            case 'ready':
+              sendTrainMessage()
+              break
+            case 'convert-complete':
+              setFsrsItems(msg.fsrsItems)
+              setPhase('training')
+              break
+            case 'progress': {
+              const value = msg.total > 0 ? (msg.current / msg.total) * 100 : 0
+              const setter = msg.enableShortTerm ? setShortTerm : setLongTerm
+              setter((prev) => ({ ...prev, progress: value || 0 }))
+              break
+            }
+            case 'training-complete': {
+              const setter = msg.enableShortTerm ? setShortTerm : setLongTerm
+              setter({ params: msg.parameters, progress: 100 })
+              loggerInfo('train-done', {
+                tag: 'finish',
+                enableShortTerm: msg.enableShortTerm,
+                params: msg.parameters,
+              })
+              break
+            }
+            case 'done':
+              setTrainTime(performance.now() - start)
+              setPhase('idle')
+              resolve()
+              break
+            case 'error':
+              setPhase('idle')
+              toast.error(`Training failed: ${msg.message}`)
+              loggerError('train-error', { error: msg.message })
+              reject(new Error(msg.message))
+              break
+          }
+        }
+      })
     },
-    [enableShortTerm, setError, doneCallback],
+    [],
   )
 
-  const isDone = () => {
-    return params.length > 0 && !isTraining
-  }
+  const isTraining = phase !== 'idle'
+  const isDone = () => shortTerm.params.length > 0 && longTerm.params.length > 0 && !isTraining
 
   const clear = () => {
-    setParams([])
+    setShortTerm({ params: [], progress: 0 })
+    setLongTerm({ params: [], progress: 0 })
     setFsrsItems(0)
-    setProgress(0)
-    setIsTraining(false)
-    setTrain_time(0)
+    setPhase('idle')
+    setTrainTime(0)
   }
 
   return {
-    params,
+    shortTerm,
+    longTerm,
     fsrsItems,
     isTraining,
-    progress,
+    phase,
+    trainTime,
     train: startTrain,
     isDone,
     clear,
-    train_time,
   } as const
 }

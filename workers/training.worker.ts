@@ -1,55 +1,88 @@
 // Training worker — runs WASM optimizer in a dedicated worker thread.
-// Exposed via Comlink for direct async function calls from main thread.
+// Uses raw postMessage because Turbopack module workers don't support Comlink.
+// A "ready" handshake is required: Turbopack swallows messages sent before init completes.
 
-console.log('[worker] Training worker loaded')
-
-import * as Comlink from 'comlink'
 import { computeParameters, convertCsvToFsrsItems } from '@open-spaced-repetition/binding'
 
-console.log('[worker] Imports resolved')
+const offsetCache = new Map<string, number>()
+const formatterCache = new Map<string, Intl.DateTimeFormat>()
 
 function getTimezoneOffset(ms: number, timezone: string): number {
-  const date = new Date(ms)
-  const utcStr = date.toLocaleString('en-US', { timeZone: 'UTC' })
-  const tzStr = date.toLocaleString('en-US', { timeZone: timezone })
-  return (new Date(tzStr).getTime() - new Date(utcStr).getTime()) / 60000
-}
+  // Cache by UTC day — offsets only change at DST boundaries (a few times/year)
+  const dayKey = `${timezone}:${Math.floor(ms / 86400000)}`
+  const cached = offsetCache.get(dayKey)
+  if (cached !== undefined) return cached
 
-export interface TrainingCallbacks {
-  onProgress: (current: number, total: number) => void
-}
-
-const api = {
-  async train(
-    csvData: Uint8Array,
-    timezone: string,
-    nextDayStartsAt: number,
-    enableShortTerm: boolean,
-    callbacks: TrainingCallbacks,
-  ): Promise<{ parameters: number[]; fsrsItems: number }> {
-    console.log('[worker] train() called, enableShortTerm:', enableShortTerm)
-    const items = convertCsvToFsrsItems(csvData, nextDayStartsAt, timezone, getTimezoneOffset)
-    console.log('[worker] convertCsvToFsrsItems done, items:', items.length)
-    const fsrsItems = items.length
-
-    const parameters = await computeParameters(items, {
-      enableShortTerm,
-      progress: (current: number, total: number) => {
-        callbacks.onProgress(current, total)
-      },
-      timeout: 1000,
+  let fmt = formatterCache.get(timezone)
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false,
     })
+    formatterCache.set(timezone, fmt)
+  }
 
-    return { parameters: Array.from(parameters), fsrsItems }
-  },
+  const date = new Date(ms)
+  const parts = fmt.formatToParts(date)
+  const get = (type: string) => parseInt(parts.find((p) => p.type === type)?.value || '0', 10)
+
+  const utcTime = Date.UTC(
+    date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(),
+    date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds(),
+  )
+  const tzTime = Date.UTC(
+    get('year'), get('month') - 1, get('day'),
+    get('hour'), get('minute'), get('second'),
+  )
+
+  const offset = Math.floor((tzTime - utcTime) / 60000)
+  offsetCache.set(dayKey, offset)
+  return offset
 }
 
-export type TrainingApi = typeof api
+export type TrainMessage = {
+  type: 'train'
+  csvData: ArrayBuffer
+  timezone: string
+  nextDayStartsAt: number
+}
 
-console.log('[worker] self.onmessage before expose:', typeof self.onmessage)
-Comlink.expose(api)
-console.log('[worker] self.onmessage after expose:', typeof self.onmessage)
+export type WorkerMessage =
+  | { type: 'ready' }
+  | { type: 'convert-complete'; fsrsItems: number }
+  | { type: 'progress'; enableShortTerm: boolean; current: number; total: number }
+  | { type: 'training-complete'; enableShortTerm: boolean; parameters: number[] }
+  | { type: 'done' }
+  | { type: 'error'; message: string }
 
-self.addEventListener('message', (e) => {
-  console.log('[worker] raw message received:', e.data)
-})
+self.onmessage = async (e: MessageEvent<TrainMessage>) => {
+  if (e.data?.type !== 'train') return
+
+  try {
+    const { csvData, timezone, nextDayStartsAt } = e.data
+    const items = convertCsvToFsrsItems(new Uint8Array(csvData), nextDayStartsAt, timezone, getTimezoneOffset)
+    self.postMessage({ type: 'convert-complete', fsrsItems: items.length } satisfies WorkerMessage)
+
+    for (const enableShortTerm of [true, false]) {
+      const parameters = await computeParameters(items, {
+        enableShortTerm,
+        progress: (current: number, total: number) => {
+          self.postMessage({ type: 'progress', enableShortTerm, current, total } satisfies WorkerMessage)
+        },
+      })
+      self.postMessage({
+        type: 'training-complete',
+        enableShortTerm,
+        parameters: Array.from(parameters),
+      } satisfies WorkerMessage)
+    }
+
+    self.postMessage({ type: 'done' } satisfies WorkerMessage)
+  } catch (err) {
+    self.postMessage({ type: 'error', message: err instanceof Error ? err.message : String(err) } satisfies WorkerMessage)
+  }
+}
+
+self.postMessage({ type: 'ready' } as WorkerMessage)
