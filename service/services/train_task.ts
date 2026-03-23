@@ -16,11 +16,41 @@ import { ProgressValue } from './types'
 
 type ProgressFunction = (enableShortTerm: boolean, current: number, total: number) => void
 
+const offsetCache = new Map<string, number>()
+const formatterCache = new Map<string, Intl.DateTimeFormat>()
+
 function getTimezoneOffset(ms: number, timezone: string): number {
+  const dayKey = `${timezone}:${Math.floor(ms / 86400000)}`
+  const cached = offsetCache.get(dayKey)
+  if (cached !== undefined) return cached
+
+  let fmt = formatterCache.get(timezone)
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false,
+    })
+    formatterCache.set(timezone, fmt)
+  }
+
   const date = new Date(ms)
-  const utcStr = date.toLocaleString('en-US', { timeZone: 'UTC' })
-  const tzStr = date.toLocaleString('en-US', { timeZone: timezone })
-  return (new Date(tzStr).getTime() - new Date(utcStr).getTime()) / 60000
+  const parts = fmt.formatToParts(date)
+  const get = (type: string) => parseInt(parts.find((p) => p.type === type)?.value || '0', 10)
+
+  const utcTime = Date.UTC(
+    date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(),
+    date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds(),
+  )
+  const tzTime = Date.UTC(
+    get('year'), get('month') - 1, get('day'),
+    get('hour'), get('minute'), get('second'),
+  )
+
+  const offset = Math.floor((tzTime - utcTime) / 60000)
+  offsetCache.set(dayKey, offset)
+  return offset
 }
 
 function basicProgress(enableShortTerm: boolean, current: number, total: number) {
