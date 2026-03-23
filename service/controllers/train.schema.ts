@@ -1,5 +1,4 @@
-import { z, ZodIssueCode } from 'zod'
-
+import { ZodIssueCode, z } from 'zod'
 
 export const WeightSchema = z.string().transform((s, ctx) => {
   const result = s.replace('[', '').replace(']', '').split(',').map(Number)

@@ -15,7 +15,6 @@ COPY . .
 # ENV NEXT_TELEMETRY_DISABLED=1
 RUN corepack enable pnpm && pnpm i;
 RUN NEXT_PRIVATE_STANDALONE=true pnpm run build;
-RUN node ./scripts/handler-modules.js
 
 
 # Production image, copy all the files and run next

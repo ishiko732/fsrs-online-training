@@ -14,11 +14,11 @@ const pinoConfig = {
   },
 }
 
-const logger = pino(pinoConfig,)
+const logger = pino(pinoConfig)
 
 type Option = {
   status?: number
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // biome-ignore lint/suspicious/noExplicitAny: logger metadata accepts any value
   [key: string]: any
 }
 

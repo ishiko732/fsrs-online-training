@@ -1,8 +1,8 @@
-@import 'tailwindcss';
+@import "tailwindcss";
 /*
   ---break---
 */
-@plugin 'tailwindcss-animate';
+@plugin "tailwindcss-animate";
 /*
   ---break---
 */
@@ -56,7 +56,7 @@
   --chart-3: hsl(197 37% 24%);
   --chart-4: hsl(43 74% 66%);
   --chart-5: hsl(27 87% 67%);
-  --radius: 0.6rem;;
+  --radius: 0.6rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);

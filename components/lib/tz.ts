@@ -1,8 +1,5 @@
-
-
 //https://github.com/ishiko732/ts-fsrs-demo/blob/c3a6cbc6ce9be2c321e238049073b3302e6cbe34/src/lib/date.ts#L1-L31
 export const currentTz = Intl.DateTimeFormat().resolvedOptions().timeZone
-
 
 export function get_timezone_offset(timeZone: string): number {
   const timeZoneName = Intl.DateTimeFormat('ia', {

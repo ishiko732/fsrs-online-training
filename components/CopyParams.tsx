@@ -31,11 +31,12 @@ export default function CopyParams({
                 href={`https://open-spaced-repetition.github.io/anki_fsrs_visualizer/?w=${array.map((a) => a.toFixed(4)).join(',')}&m=${0.9}&e=${enable_short_term ? 1 : 0}`}
                 className="text-blue-500 underline"
                 target="_blank"
+                rel="noopener"
               >
                 anki fsrs visualizer
               </a>
             </p>,
-            { duration: 10000 },
+            { duration: 10000 }
           )
         })
         return 'Copied!'
@@ -57,7 +58,11 @@ export default function CopyParams({
         </button>
       </dt>
       <dd className="mt-1 text-sm text-gray-900">
-        <FormatArray array={array} unique_key={enable_short_term ? 'short' : 'long'} isCopied={isCopied} />
+        <FormatArray
+          array={array}
+          unique_key={enable_short_term ? 'short' : 'long'}
+          isCopied={isCopied}
+        />
       </dd>
     </>
   )

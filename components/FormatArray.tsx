@@ -17,7 +17,11 @@ export default function FormatArray<T>({
         {array.map((item, index) => (
           <li
             key={unique_key + index}
-            className={cn('marker:text-gray-500', className, `transition-all ${isCopied ? 'animate-pulse' : ''}`)}
+            className={cn(
+              'marker:text-gray-500',
+              className,
+              `transition-all ${isCopied ? 'animate-pulse' : ''}`
+            )}
           >
             <span className="text-gray-600">{`${item}`}</span>
           </li>

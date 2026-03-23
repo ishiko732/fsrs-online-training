@@ -30,11 +30,14 @@ const SupportApp = new Hono()
       exposeHeaders: ['Content-Length', 'Content-Type', 'Authorization'],
       maxAge: 600,
       credentials: true,
-    }),
+    })
   )
   .get('/timezones', async (c) => {
     const timezones = Intl.supportedValuesOf('timeZone')
-    c.header('Cache-Control', 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800')
+    c.header(
+      'Cache-Control',
+      'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800'
+    )
     return c.json(timezones)
   })
   .get('/redirect', zValidator('query', Redirect), async (c) => {

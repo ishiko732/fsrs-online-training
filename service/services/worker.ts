@@ -1,5 +1,7 @@
-import { convertCsvToFsrsItems,computeParameters } from '@open-spaced-repetition/binding'
-
+import {
+  computeParameters,
+  convertCsvToFsrsItems,
+} from '@open-spaced-repetition/binding'
 
 function getTimezoneOffset(ms: number, timezone: string): number {
   const date = new Date(ms)
@@ -7,7 +9,6 @@ function getTimezoneOffset(ms: number, timezone: string): number {
   const tzStr = date.toLocaleString('en-US', { timeZone: timezone })
   return (new Date(tzStr).getTime() - new Date(utcStr).getTime()) / 60000
 }
-
 
 export interface TrainOptions {
   csvData: Uint8Array
@@ -23,8 +24,12 @@ export interface TrainResult {
 }
 
 export async function train(options: TrainOptions): Promise<TrainResult> {
-
-  const items = convertCsvToFsrsItems(options.csvData, options.nextDayStartsAt, options.timezone, getTimezoneOffset)
+  const items = convertCsvToFsrsItems(
+    options.csvData,
+    options.nextDayStartsAt,
+    options.timezone,
+    getTimezoneOffset
+  )
   const fsrsItems = items.length
 
   const parameters = await computeParameters(items, {

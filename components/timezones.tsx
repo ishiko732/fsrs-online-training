@@ -1,6 +1,13 @@
 'use client'
 
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@components/ui/command'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@components/ui/popover'
 import { cn } from '@lib/utils'
 import { Check } from 'lucide-react'
@@ -25,21 +32,28 @@ async function fetchTimezones(): Promise<string[]> {
   return data
 }
 
-export default function TimezoneSelector({ tz, setTz, className, disabled }: TimezoneSelectorProps) {
+export default function TimezoneSelector({
+  tz,
+  setTz,
+  className,
+  disabled,
+}: TimezoneSelectorProps) {
   const [open, setOpen] = useState(false)
   const [timezones, setTimezones] = useState<string[]>(cachedTimezones ?? [])
 
   useEffect(() => {
-    fetchTimezones().then(setTimezones).catch(() => {
-      // Fallback: use the browser's Intl API directly if fetch fails
-      try {
-        const fallback = Intl.supportedValuesOf('timeZone')
-        setTimezones(fallback)
-        cachedTimezones = fallback
-      } catch {
-        // Intl.supportedValuesOf may not be available in older browsers
-      }
-    })
+    fetchTimezones()
+      .then(setTimezones)
+      .catch(() => {
+        // Fallback: use the browser's Intl API directly if fetch fails
+        try {
+          const fallback = Intl.supportedValuesOf('timeZone')
+          setTimezones(fallback)
+          cachedTimezones = fallback
+        } catch {
+          // Intl.supportedValuesOf may not be available in older browsers
+        }
+      })
   }, [])
 
   const handleClick = (tz: string) => {
@@ -62,7 +76,13 @@ export default function TimezoneSelector({ tz, setTz, className, disabled }: Tim
             />
           </div>
         </PopoverTrigger>
-        <PopoverContent align="start" className={cn('p-0 text-left w-[var(--radix-popover-trigger-width)]', className)}>
+        <PopoverContent
+          align="start"
+          className={cn(
+            'p-0 text-left w-[var(--radix-popover-trigger-width)]',
+            className
+          )}
+        >
           <Command>
             <CommandInput placeholder="Search TimeZone..." />
             {/* https://github.com/shadcn-ui/ui/issues/2944 */}
@@ -70,8 +90,20 @@ export default function TimezoneSelector({ tz, setTz, className, disabled }: Tim
               <CommandEmpty>No Dataset</CommandEmpty>
               <CommandGroup>
                 {timezones.map((timezone, index) => (
-                  <CommandItem key={index} value={timezone} onSelect={handleClick} aria-label={timezone} role="select" className={'w-full'}>
-                    <Check className={cn('mr-2 h-4 w-4', timezone === tz ? 'opacity-100' : 'opacity-0')} />
+                  <CommandItem
+                    key={index}
+                    value={timezone}
+                    onSelect={handleClick}
+                    aria-label={timezone}
+                    role="select"
+                    className={'w-full'}
+                  >
+                    <Check
+                      className={cn(
+                        'mr-2 h-4 w-4',
+                        timezone === tz ? 'opacity-100' : 'opacity-0'
+                      )}
+                    />
                     {timezone}
                   </CommandItem>
                 ))}
