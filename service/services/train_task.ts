@@ -1,43 +1,91 @@
 'use server'
-// tip: It cannot run on Vercel because it got optimized away.
 import { TEvaluateFormData, TTrainFormData } from '@api/controllers/train.schema'
-import { loggerError, loggerInfo } from '@api/utils/logger'
-import { FSRS, FSRSItem, FSRSReview, type ModelEvaluation } from 'fsrs-rs-nodejs'
+import { loggerInfo } from '@api/utils/logger'
+import {
+  computeParameters as bindingComputeParameters,
+  convertCsvToFsrsItems,
+  FSRSBinding,
+  FSRSBindingItem,
+  type ModelEvaluation,
+} from '@open-spaced-repetition/binding'
 import { Context } from 'hono'
 import { streamSSE } from 'hono/streaming'
-import { Readable } from 'stream'
 import { generatorParameters } from 'ts-fsrs'
 
-import { analyzeCSV } from './collect'
-import { FSRSItem as BasicFSRSItem, ProgressValue } from './types'
+import { ProgressValue } from './types'
 
-type ProgressFunction = (enableShortTerm: boolean, err: Error | null, progressValue: ProgressValue) => void
+type ProgressFunction = (enableShortTerm: boolean, current: number, total: number) => void
 
-function basicProgress(enableShortTerm: boolean, err: Error | null, progressValue: ProgressValue) {
-  if (err) {
-    loggerError(`[enableShortTerm=${enableShortTerm}] Progress callback error`, err)
-    return
+const offsetCache = new Map<string, number>()
+const formatterCache = new Map<string, Intl.DateTimeFormat>()
+
+function getTimezoneOffset(ms: number, timezone: string): number {
+  const dayKey = `${timezone}:${Math.floor(ms / 86400000)}`
+  const cached = offsetCache.get(dayKey)
+  if (cached !== undefined) return cached
+
+  let fmt = formatterCache.get(timezone)
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false,
+    })
+    formatterCache.set(timezone, fmt)
   }
+
+  const date = new Date(ms)
+  const parts = fmt.formatToParts(date)
+  const get = (type: string) => parseInt(parts.find((p) => p.type === type)?.value || '0', 10)
+
+  const utcTime = Date.UTC(
+    date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(),
+    date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds(),
+  )
+  const tzTime = Date.UTC(
+    get('year'), get('month') - 1, get('day'),
+    get('hour'), get('minute'), get('second'),
+  )
+
+  const offset = Math.floor((tzTime - utcTime) / 60000)
+  offsetCache.set(dayKey, offset)
+  return offset
+}
+
+function basicProgress(enableShortTerm: boolean, current: number, total: number) {
+  const percent = total > 0 ? Math.round((current / total) * 100) : 0
   loggerInfo('progress', {
     enableShortTerm,
-    progressValue,
+    progressValue: { current, total, percent },
   })
 }
 
-async function computeParametersWrapper(enableShortTerm: boolean, fsrsItems: FSRSItem[], progress: ProgressFunction) {
-  // create FSRS instance and optimize
-  const fsrs = new FSRS(null)
-
-  const optimizedParameters = await fsrs.computeParameters(fsrsItems, enableShortTerm, progress.bind(null, enableShortTerm), 1000 /** 1s */)
+async function computeParametersWrapper(
+  enableShortTerm: boolean,
+  fsrsItems: FSRSBindingItem[],
+  progress: ProgressFunction,
+) {
+  const optimizedParameters = await bindingComputeParameters(fsrsItems, {
+    enableShortTerm,
+    progress: (current: number, total: number) => {
+      progress(enableShortTerm, current, total)
+    },
+    timeout: 1000,
+  })
   return optimizedParameters
 }
 
-export async function trainTask(enableShortTerm: boolean, fsrsItems: FSRSItem[], progress: ProgressFunction = basicProgress) {
+export async function trainTask(
+  enableShortTerm: boolean,
+  fsrsItems: FSRSBindingItem[],
+  progress: ProgressFunction = basicProgress,
+) {
   return computeParametersWrapper(enableShortTerm, fsrsItems, progress)
 }
 
-export async function evaluate(optimizedParameters: number[], fsrsItems: FSRSItem[]) {
-  const model = new FSRS(optimizedParameters)
+export async function evaluate(optimizedParameters: number[], fsrsItems: FSRSBindingItem[]) {
+  const model = new FSRSBinding(optimizedParameters)
   return new Promise<ModelEvaluation>((resolve, reject) => {
     try {
       resolve(model.evaluate(fsrsItems))
@@ -47,34 +95,27 @@ export async function evaluate(optimizedParameters: number[], fsrsItems: FSRSIte
   })
 }
 
+async function csvToFsrsItems(file: File, timezone: string, hourOffset: number) {
+  const arrayBuffer = await file.arrayBuffer()
+  const csvData = new Uint8Array(arrayBuffer)
+  return convertCsvToFsrsItems(csvData, hourOffset, timezone, getTimezoneOffset)
+}
+
 export async function trainByFormData<Ctx extends Context>(c: Ctx, formData: TTrainFormData) {
   const message_queue: Array<{ data: string; event: string; id: string }> = []
   let start = performance.now()
-  const arrayBuffer = await formData.file.arrayBuffer()
-  const buffer = Buffer.from(arrayBuffer)
-  const stream = Readable.from(buffer)
 
-  message_queue.push({
-    data: JSON.stringify({ type: `File read`, ms: +(performance.now() - start).toFixed(3) }),
-    event: 'info',
-    id: 'file-read',
-  })
-  start = performance.now()
-  const result = await analyzeCSV(stream, formData.timezone, formData.hour_offset)
+  const fsrs_items = await csvToFsrsItems(formData.file, formData.timezone, formData.hour_offset)
   message_queue.push({
     data: JSON.stringify({
       type: `File analysis`,
       ms: +(performance.now() - start).toFixed(3),
-      data: result.summary,
-      fields: result.fields,
+      fsrsItems: fsrs_items.length,
     }),
     event: 'info',
     id: 'file-analysis',
   })
 
-  const fsrs_items = result.fsrs_items.map(
-    (item: BasicFSRSItem) => new FSRSItem(item.map((review) => new FSRSReview(review.rating, review.deltaT))),
-  )
   const sseEnabled = formData.sse
   let metrics: ModelEvaluation | { logLoss: null; rmseBins: null } = { logLoss: null, rmseBins: null }
   if (!sseEnabled) {
@@ -88,17 +129,10 @@ export async function trainByFormData<Ctx extends Context>(c: Ctx, formData: TTr
     return c.json({ params, metrics }, 200)
   }
   return streamSSE(c, async (stream) => {
-    async function progress(enableShortTerm: boolean, err: Error | null, progressValue: ProgressValue) {
-      if (err) {
-        await stream.writeSSE({
-          data: JSON.stringify(err.message),
-          event: 'error',
-          id: `error`,
-        })
-        await stream.close()
-        return
-      }
-      await stream.writeSSE({
+    function progress(enableShortTerm: boolean, current: number, total: number) {
+      const percent = total > 0 ? Math.round((current / total) * 100) : 0
+      const progressValue: ProgressValue = { current, total, percent }
+      stream.writeSSE({
         data: JSON.stringify(progressValue),
         event: 'progress',
         id: `${enableShortTerm ? 'short' : 'long'}-term-${progressValue.percent}`,
@@ -146,33 +180,21 @@ export async function trainByFormData<Ctx extends Context>(c: Ctx, formData: TTr
 export async function evaluateByFormData<Ctx extends Context>(c: Ctx, formData: TEvaluateFormData) {
   const message_queue: Array<{ data: string; event: string; id: string }> = []
   let start = performance.now()
-  const arrayBuffer = await formData.file.arrayBuffer()
-  const buffer = Buffer.from(arrayBuffer)
-  const stream = Readable.from(buffer)
 
-  message_queue.push({
-    data: JSON.stringify({ type: `File read`, ms: +(performance.now() - start).toFixed(3) }),
-    event: 'info',
-    id: 'file-read',
-  })
-  start = performance.now()
-  const result = await analyzeCSV(stream, formData.timezone, formData.hour_offset)
+  const fsrs_items = await csvToFsrsItems(formData.file, formData.timezone, formData.hour_offset)
   message_queue.push({
     data: JSON.stringify({
       type: `File analysis`,
       ms: +(performance.now() - start).toFixed(3),
-      data: result.summary,
-      fields: result.fields,
+      fsrsItems: fsrs_items.length,
     }),
     event: 'info',
     id: 'file-analysis',
   })
+
   const { w } = generatorParameters({ w: formData.w })
-  const fsrs_items = result.fsrs_items.map(
-    (item: BasicFSRSItem) => new FSRSItem(item.map((review) => new FSRSReview(review.rating, review.deltaT))),
-  )
   if (fsrs_items.length === 0) {
-    return c.json({ error: `No valid FSRS items found`, analysis: result }, 400)
+    return c.json({ error: `No valid FSRS items found` }, 400)
   }
   const sseEnabled = formData.sse
   if (!sseEnabled) {

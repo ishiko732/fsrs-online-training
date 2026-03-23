@@ -2,7 +2,6 @@
 
 import { TCallback } from '@api/controllers/support'
 import { HashObject } from '@api/services/hash_parse'
-import AnalysisForm from '@components/Analysis'
 import CopyParams from '@components/CopyParams'
 import DemoCSV from '@components/Demo-csv'
 import ErrorForm from '@components/Error'
@@ -11,8 +10,7 @@ import TimezoneSelector from '@components/timezones'
 import { Input } from '@components/ui/input'
 import { Label } from '@components/ui/label'
 import { Progress } from '@components/ui/progress'
-import useAnalyze from '@hooks/useAnalyze'
-import useTrainFSRS from '@hooks/useTrain'
+import useTrain from '@hooks/useTrain'
 import { hc } from 'hono/client'
 import { FileText, Upload } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
@@ -40,69 +38,30 @@ export default function Home() {
   const [draftTz, setDraftTz] = useState<string>(currentTz)
   const [tz, setTz] = useState<string>(currentTz)
   const [draftNextDayStartAt, setDraftNextDayStartAt] = useState<number>(4)
-  const [nextDayStartAt, setNextDayStartAt] = useState<number>(4)
-  const [progressInfo, setProgressInfo] = useState(0)
-  const [analysis, setAnalysis] = useState<Awaited<ReturnType<typeof analyzeCSV>> | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const {
-    params: params_short,
-    isTraining: isTraining_short,
-    progress: progress_short,
-    train: train_short,
-    isDone: isDone_short,
-    clear: clear_short,
-    train_time: train_time_short,
-  } = useTrainFSRS({
-    enableShortTerm: true,
-    setError,
-    initdCallback: () => handleInitd(true),
-    doneCallback: (params) => handleDone(params, true),
-  })
-  const {
-    params: params_long,
-    isTraining: isTraining_long,
-    progress: progress_long,
-    train: train_long,
-    isDone: isDone_long,
-    clear: clear_long,
-    train_time: train_time_long,
-  } = useTrainFSRS({
-    enableShortTerm: false,
-    setError,
-    initdCallback: () => handleInitd(false),
-    doneCallback: (params) => handleDone(params, false),
-  })
-  const initdRef = useRef([false, false])
-  const doneRef = useRef([false, false])
+  const { shortTerm, longTerm, fsrsItems, isTraining, phase, trainTime, train, isDone, clear } = useTrain()
   const callbackOnClientRef = useRef(false)
+  const toastIdRef = useRef<string | number | undefined>(undefined)
 
-  const analyzeCSV = useAnalyze({ setError, setProgressInfo })
-
-  const handleInitd = (enableShortTerm: boolean) => {
-    initdRef.current[enableShortTerm ? 0 : 1] = true
-
-    const checked = initdRef.current.every((v) => v)
-    if (checked) {
-      toast.promise(handleHashChange, {
-        loading: 'Check...',
-      })
-      toast.info('Both models are initialized')
+  // Update toast when phase changes
+  useEffect(() => {
+    if (phase === 'training' && toastIdRef.current) {
+      toast.loading('Training...', { id: toastIdRef.current })
     }
-  }
+  }, [phase])
 
-  const handleDone = (params: number[], enableShortTerm: boolean) => {
-    doneRef.current[enableShortTerm ? 0 : 1] = true
-    const checked = doneRef.current.every((v) => v)
-    container.body[enableShortTerm ? 'short_term_params' : 'long_term_params'] = params
-
-    if (checked && container.url) {
-      toast.promise(handleCallback(container), {
-        loading: 'Callback...',
-        success: 'Callback success',
-        error: 'Callback failed',
-      })
-    }
-  }
+  // Fire callback when both trainings complete
+  useEffect(() => {
+    if (!isDone() || !container.url) return
+    container.body.short_term_params = shortTerm.params
+    container.body.long_term_params = longTerm.params
+    toast.promise(handleCallback(container), {
+      loading: 'Callback...',
+      success: 'Callback success',
+      error: 'Callback failed',
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shortTerm.params, longTerm.params])
 
   const handleCallback = (body: TCallback) => {
     if (!callbackOnClientRef.current) {
@@ -120,56 +79,21 @@ export default function Home() {
     })
   }
 
-  const handleAnalysis = async (file: File, tz: string, nextDayStartAt: number) => {
+  const handleTrain = async (file: File, tz: string, nextDayStartAt: number) => {
     setError(null)
-    setAnalysis(null)
-    setProgressInfo(0)
     setTz(tz)
-    setNextDayStartAt(nextDayStartAt)
-    clear_short()
-    clear_long()
+    clear()
     container.body.short_term_params = []
     container.body.long_term_params = []
-    doneRef.current = [false, false]
-    const analysisResult = analyzeCSV(file, tz, nextDayStartAt)
+    container.body.tz = tz
+    container.body.nextDayStartAt = nextDayStartAt
 
-    toast.promise(analysisResult, {
-      loading: 'Analyzing CSV...',
-      success: (analysisResult) => {
-        if (analysisResult?.fsrs_items.length > 0) {
-          toast.promise(
-            new Promise<string>((resolve) => {
-              const timeId = setInterval(() => {
-                if (doneRef.current.every((v) => v)) {
-                  clearInterval(timeId)
-                  resolve('Training completed')
-                }
-              }, 500)
-            }),
-            {
-              loading: 'Training...',
-              success: (data) => data,
-              error: (data) => data,
-            },
-          )
-          container.body.tz = tz
-          container.body.nextDayStartAt = nextDayStartAt
-          container.body.total_rows = analysisResult.summary.rowCount
-          container.body.total_cards = analysisResult.summary.grouped
-          container.body.total_fsrs_items = analysisResult.summary.fsrsItems
-          setAnalysis(analysisResult)
-          train_short(analysisResult.fsrs_items)
-          train_long(analysisResult.fsrs_items)
-        } else {
-          toast.warning('No data to train')
-        }
-        return `Analysis completed`
-      },
-      error: () => {
-        return 'Failed to analyze CSV'
-      },
-    })
-    setProgressInfo(0)
+    const csvBuffer = await file.arrayBuffer()
+    toastIdRef.current = toast.loading('Converting CSV...')
+
+    train(csvBuffer, tz, nextDayStartAt)
+      .then(() => toast.success('Training completed', { id: toastIdRef.current }))
+      .catch((e) => toast.error(`Training failed: ${e.message}`, { id: toastIdRef.current }))
   }
 
   const handleFetch = async (csv: string, fetchOnClient: boolean) => {
@@ -200,7 +124,6 @@ export default function Home() {
       if (hashObject.success) {
         setTz(hashObject.data.tz)
         setDraftTz(hashObject.data.tz)
-        setNextDayStartAt(hashObject.data.nextDayStartAt)
         setDraftNextDayStartAt(hashObject.data.nextDayStartAt)
         if (hashObject.data.callback) {
           container.url = hashObject.data.callback
@@ -210,7 +133,7 @@ export default function Home() {
           loading: 'Fetching CSV...',
           success: async (blob) => {
             const file = new File([blob], 'file.csv')
-            handleAnalysis(file, hashObject.data.tz, hashObject.data.nextDayStartAt)
+            handleTrain(file, hashObject.data.tz, hashObject.data.nextDayStartAt)
             return 'CSV Fetched'
           },
           error: 'Failed to fetch CSV',
@@ -218,6 +141,18 @@ export default function Home() {
       }
     }
   }
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: ignore
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      toast('Welcome to FSRS online training', { duration: 10000 })
+      toast(<DemoCSV />, { duration: 60000 })
+    })
+    toast.promise(handleHashChange, {
+      loading: 'Check...',
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const onDrop = async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0]
@@ -227,7 +162,7 @@ export default function Home() {
       setError('Please upload a CSV file')
       return
     }
-    await handleAnalysis(file, draftTz, draftNextDayStartAt)
+    await handleTrain(file, draftTz, draftNextDayStartAt)
   }
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -236,18 +171,11 @@ export default function Home() {
       'text/csv': ['.csv'],
     },
     multiple: false,
-    disabled: isTraining_short,
+    disabled: isTraining,
   })
 
-  useEffect(() => {
-    requestAnimationFrame(() => {
-      toast('Welcome to FSRS online training', { duration: 10000 })
-      toast(<DemoCSV />, { duration: 60000 })
-    })
-  }, [])
-
-  const merge_progress = +((progress_short + progress_long) / 2).toFixed(6) || 0
-  const merge_train_time = +(Math.max(train_time_short, train_time_long) / 1000).toFixed(3)
+  const merge_progress = +((shortTerm.progress + longTerm.progress) / 2).toFixed(6) || 0
+  const merge_train_time = +(trainTime / 1000).toFixed(3)
   const offset_hour = Math.floor(get_timezone_offset(tz) / 60)
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -266,7 +194,7 @@ export default function Home() {
             </Label>
             <label className="text-sm text-gray-500">The timezone of the user.</label>
           </div>
-          <TimezoneSelector tz={draftTz} setTz={setDraftTz} disabled={isTraining_short || isTraining_long} />
+          <TimezoneSelector tz={draftTz} setTz={setDraftTz} disabled={isTraining} />
         </div>
 
         {/* Next Day Start At Input */}
@@ -285,7 +213,7 @@ export default function Home() {
             step={1}
             min={0}
             max={23}
-            disabled={isTraining_short || isTraining_long}
+            disabled={isTraining}
             className="w-full mt-1 block sm:w-1/2 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
           />
         </div>
@@ -293,7 +221,7 @@ export default function Home() {
           {...getRootProps()}
           className={`mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-lg ${
             isDragActive ? 'border-blue-400 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
-          } ${isTraining_short || isTraining_long ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+          } ${isTraining ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
         >
           <div className="space-y-1 text-center">
             <Upload className="mx-auto h-12 w-12 text-gray-400" aria-hidden="true" />
@@ -324,13 +252,15 @@ export default function Home() {
           </div>
         </div>
 
-        {(isTraining_short || isTraining_long) && (
+        {isTraining && (
           <div className="mt-4">
-            <Progress value={merge_progress} className="w-full" />
-            <p className="mt-2 text-sm text-gray-500 text-center">Train ... {merge_progress}%</p>
+            <Progress value={phase === 'converting' ? undefined : merge_progress} className="w-full" />
+            <p className="mt-2 text-sm text-gray-500 text-center">
+              {phase === 'converting' ? 'Converting CSV...' : `Training ... ${merge_progress}%`}
+            </p>
           </div>
         )}
-        {isDone_short() && isDone_long() && (
+        {isDone() && (
           <div className="mt-8 bg-white shadow rounded-lg divide-y divide-gray-200">
             <div className="px-4 py-5 sm:px-6">
               <h3 className="text-lg font-medium text-gray-900">{`Train Results (${merge_train_time}s)`}</h3>
@@ -343,8 +273,8 @@ export default function Home() {
                     <dd className="mt-1 text-sm text-gray-900">{`${tz} ( ${offset_hour > 0 ? `+${offset_hour}` : offset_hour === 0 ? 0 : offset_hour}h ) `}</dd>
                   </div>
                   <div>
-                    <dt className="text-sm font-medium text-gray-500">Next Day Start At</dt>
-                    <dd className="mt-1 text-sm text-gray-900">{nextDayStartAt}</dd>
+                    <dt className="text-sm font-medium text-gray-500">Number of FSRSItems</dt>
+                    <dd className="mt-1 text-sm text-gray-900">{fsrsItems}</dd>
                   </div>
                 </div>
               </div>
@@ -356,7 +286,7 @@ export default function Home() {
                       <dd className="mt-1 text-sm text-gray-900">Short-Term</dd>
                     </div>
                     <div className="sm:col-span-2 text-left">
-                      <CopyParams array={params_short} enable_short_term={true} />
+                      <CopyParams array={shortTerm.params} enable_short_term={true} />
                     </div>
                   </dl>
                 </div>
@@ -368,7 +298,7 @@ export default function Home() {
                       <dd className="mt-1 text-sm text-gray-900">Long-Term</dd>
                     </div>
                     <div className="sm:col-span-2 text-left">
-                      <CopyParams array={params_long} enable_short_term={false} />
+                      <CopyParams array={longTerm.params} enable_short_term={false} />
                     </div>
                   </dl>
                 </div>
@@ -377,8 +307,6 @@ export default function Home() {
           </div>
         )}
         <ErrorForm error={error} />
-
-        <AnalysisForm analysis={analysis} progress={progressInfo} />
       </div>
     </div>
   )

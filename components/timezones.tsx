@@ -2,10 +2,9 @@
 
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@components/ui/popover'
-import { timezones } from '@lib/timezones'
 import { cn } from '@lib/utils'
 import { Check } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { Input } from './ui/input'
 
@@ -16,8 +15,33 @@ export type TimezoneSelectorProps = {
   disabled?: boolean
 }
 
+let cachedTimezones: string[] | null = null
+
+async function fetchTimezones(): Promise<string[]> {
+  if (cachedTimezones) return cachedTimezones
+  const res = await fetch('/api/support/timezones')
+  const data: string[] = await res.json()
+  cachedTimezones = data
+  return data
+}
+
 export default function TimezoneSelector({ tz, setTz, className, disabled }: TimezoneSelectorProps) {
   const [open, setOpen] = useState(false)
+  const [timezones, setTimezones] = useState<string[]>(cachedTimezones ?? [])
+
+  useEffect(() => {
+    fetchTimezones().then(setTimezones).catch(() => {
+      // Fallback: use the browser's Intl API directly if fetch fails
+      try {
+        const fallback = Intl.supportedValuesOf('timeZone')
+        setTimezones(fallback)
+        cachedTimezones = fallback
+      } catch {
+        // Intl.supportedValuesOf may not be available in older browsers
+      }
+    })
+  }, [])
+
   const handleClick = (tz: string) => {
     setTz(tz)
     setOpen(false)

@@ -1,137 +1,119 @@
-import { getProgress } from '@api/services/collect'
-import type { FSRSItem, ProgressState } from '@api/services/types'
+import type { TrainMessage, WorkerMessage } from '@/workers/training.worker'
 import { loggerError, loggerInfo } from '@api/utils/logger'
-import * as Sentry from '@sentry/nextjs'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
-export type TrainFSRSProps = {
-  enableShortTerm: boolean
-  setError: (error: string) => void
-  initdCallback?: () => void
-  doneCallback?: (params: number[]) => void
+export type TrainResult = {
+  params: number[]
+  progress: number
 }
 
-export default function useTrainFSRS({ enableShortTerm, setError, initdCallback, doneCallback }: TrainFSRSProps) {
-  const [progress, setProgress] = useState(0)
-  const [isTraining, setIsTraining] = useState(false)
-  const workerRef = useRef<Worker>(undefined)
-  const timeIdRef = useRef<NodeJS.Timeout>(undefined)
-  const [params, setParams] = useState<number[]>([])
-  const startTime = useRef<DOMHighResTimeStamp>(0)
-  const [train_time, setTrain_time] = useState<DOMHighResTimeStamp>(0)
-  const initdRef = useRef(false)
+export type TrainPhase = 'idle' | 'converting' | 'training'
 
-  const handleProgress = (wasmMemoryBuffer: ArrayBuffer, pointer: number) => {
-    const { itemsProcessed, itemsTotal } = getProgress(wasmMemoryBuffer, pointer)
-    const value = (itemsProcessed / itemsTotal) * 100
-    setProgress(value || 0)
-  }
+export default function useTrain() {
+  const [phase, setPhase] = useState<TrainPhase>('idle')
+  const [shortTerm, setShortTerm] = useState<TrainResult>({ params: [], progress: 0 })
+  const [longTerm, setLongTerm] = useState<TrainResult>({ params: [], progress: 0 })
+  const [fsrsItems, setFsrsItems] = useState(0)
+  const [trainTime, setTrainTime] = useState(0)
+  const workerRef = useRef<Worker | null>(null)
 
-  useEffect(() => {
-    const handlerMessage = (event: MessageEvent<number[] | ProgressState>) => {
-      loggerInfo('worker-event', event.data)
-      if ('tag' in event.data) {
-        // process ProgressState
-        const progressState = event.data as ProgressState
-        if (progressState.tag === 'start') {
-          const { wasmMemoryBuffer, pointer } = progressState
-          if (wasmMemoryBuffer && pointer) {
-            handleProgress(wasmMemoryBuffer, pointer)
+  const startTrain = useCallback(
+    (csvData: ArrayBuffer, timezone: string, nextDayStartsAt: number): Promise<void> => {
+      setPhase('converting')
+      setShortTerm({ params: [], progress: 0 })
+      setLongTerm({ params: [], progress: 0 })
+      setFsrsItems(0)
+      setTrainTime(0)
+      const start = performance.now()
 
-            const timeId = setInterval(() => {
-              handleProgress(wasmMemoryBuffer, pointer)
-            }, 100)
-            timeIdRef.current = timeId
-          } else {
-            toast.warning(`Your browser or device does not support displaying the progress bar.`, { duration: 10000 })
-          }
-        } else if (progressState.tag === 'finish') {
-          clearInterval(timeIdRef.current)
-          const params = [...progressState.parameters]
-          setParams(params)
-          setIsTraining(false)
-          setTrain_time(performance.now() - startTime.current)
-          loggerInfo('worker-done', {
-            tag:'finish',
-            params
-          })
-          doneCallback?.(params)
-        } else if (progressState.tag === 'initd') {
-          loggerInfo('worker-init', {
-            tag:'initd',
-          })
-          initdCallback?.()
-          initdRef.current = true
-        } else if (progressState.tag === 'initd-failed') {
-          loggerError('worker-failed', {
-            tag:'initd-failed',
-          })
-          toast.error(`Model initialization failed`)
-          initdRef.current = false
-        } else if (progressState.tag === 'error') {
-          setError(progressState.error)
-          const error = new Error(progressState.error)
-          error.name = 'WorkerError'
-          Sentry.captureException(error)
-          toast.error(`${progressState.error}`)
-          loggerError('worker-error', progressState)
+      return new Promise<void>((resolve, reject) => {
+        if (!workerRef.current) {
+          workerRef.current = new Worker(
+            new URL('../workers/training.worker.ts', import.meta.url),
+            { type: 'module' },
+          )
         }
-      }
-    }
-    workerRef.current = new Worker(new URL('@api/services/worker.ts', import.meta.url))
+        const worker = workerRef.current
 
-    workerRef.current.onmessage = (event: MessageEvent<number[] | ProgressState>) => {
-      handlerMessage(event)
-    }
-    workerRef.current.onerror = (err) => {
-      Sentry.captureException(err.error || err)
-      setError(err.message)
-    }
-    workerRef.current.postMessage({ init: true })
+        const sendTrainMessage = () => {
+          worker.postMessage(
+            { type: 'train', csvData, timezone, nextDayStartsAt } satisfies TrainMessage,
+            [csvData],
+          )
+        }
 
-    return () => {
-      workerRef.current?.terminate()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+        worker.onerror = (e) => {
+          setPhase('idle')
+          reject(new Error(e.message))
+        }
 
-  const train = useCallback(
-    (items: FSRSItem[]) => {
-      // if (!initd) {
-      //   const model = enableShortTerm ? 'Short-Term' : 'Long-Term'
-      //   setError(`Model(${model}) not initialized`)
-      //   toast.error(`Model(${model}) not initialized`)
-      //   return
-      // }
-      setIsTraining(true)
-      setProgress(0)
-      setParams([])
-      setTrain_time(0)
-      startTime.current = performance.now()
-      workerRef.current?.postMessage({ items, enableShortTerm })
+        worker.onmessage = (e: MessageEvent<WorkerMessage>) => {
+          const msg = e.data
+          if (!msg || typeof msg !== 'object' || !('type' in msg)) return
+
+          switch (msg.type) {
+            case 'ready':
+              sendTrainMessage()
+              break
+            case 'convert-complete':
+              setFsrsItems(msg.fsrsItems)
+              setPhase('training')
+              break
+            case 'progress': {
+              const value = msg.total > 0 ? (msg.current / msg.total) * 100 : 0
+              const setter = msg.enableShortTerm ? setShortTerm : setLongTerm
+              setter((prev) => ({ ...prev, progress: value || 0 }))
+              break
+            }
+            case 'training-complete': {
+              const setter = msg.enableShortTerm ? setShortTerm : setLongTerm
+              setter({ params: msg.parameters, progress: 100 })
+              loggerInfo('train-done', {
+                tag: 'finish',
+                enableShortTerm: msg.enableShortTerm,
+                params: msg.parameters,
+              })
+              break
+            }
+            case 'done':
+              setTrainTime(performance.now() - start)
+              setPhase('idle')
+              resolve()
+              break
+            case 'error':
+              setPhase('idle')
+              toast.error(`Training failed: ${msg.message}`)
+              loggerError('train-error', { error: msg.message })
+              reject(new Error(msg.message))
+              break
+          }
+        }
+      })
     },
-    [enableShortTerm],
+    [],
   )
 
-  const isDone = () => {
-    return params.length > 0 && !isTraining
-  }
+  const isTraining = phase !== 'idle'
+  const isDone = () => shortTerm.params.length > 0 && longTerm.params.length > 0 && !isTraining
 
   const clear = () => {
-    setParams([])
-    setProgress(0)
-    setIsTraining(false)
-    setTrain_time(0)
+    setShortTerm({ params: [], progress: 0 })
+    setLongTerm({ params: [], progress: 0 })
+    setFsrsItems(0)
+    setPhase('idle')
+    setTrainTime(0)
   }
 
   return {
-    params,
+    shortTerm,
+    longTerm,
+    fsrsItems,
     isTraining,
-    progress,
-    train,
+    phase,
+    trainTime,
+    train: startTrain,
     isDone,
     clear,
-    train_time,
   } as const
 }
