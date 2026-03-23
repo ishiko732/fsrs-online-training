@@ -32,4 +32,9 @@ interface WorkerErrorInfo {
   error: string
 }
 
-export type ProgressState = Progress | ProgressStart | ProgressFinish | InitdWorker | WorkerErrorInfo
+export type ProgressState =
+  | Progress
+  | ProgressStart
+  | ProgressFinish
+  | InitdWorker
+  | WorkerErrorInfo

@@ -2,7 +2,11 @@
 
 import NextError from 'next/error'
 
-export default function GlobalError({ error }: { error: Error & { digest?: string } }) {
+export default function GlobalError({
+  error,
+}: {
+  error: Error & { digest?: string }
+}) {
   console.error(error)
 
   return (

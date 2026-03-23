@@ -1,7 +1,7 @@
 #!/usr/bin/env node
+import cp from 'child_process'
 import fs from 'fs'
 import path from 'path'
-import cp from 'child_process'
 
 const base = path.resolve('node_modules')
 const target = path.resolve('.next/standalone/node_modules')
@@ -28,4 +28,3 @@ if (fs.existsSync(scopedDir)) {
     cp.execSync(`cp -a ${src} ${dst}`)
   })
 }
-

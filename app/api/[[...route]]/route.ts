@@ -14,12 +14,12 @@ const app = InitGlobalMiddlewares(new Hono())
     return c.json({ error: 'Not found' }, 404)
   })
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const routes = app
   // tip: It cannot run on Vercel because it got optimized away.
   // .route('/train', TrainApp)
   .route('/support', SupportApp)
 
 const handler = handle(app)
+
 export { handler as DELETE, handler as GET, handler as POST, handler as PUT }
 export type AppType = typeof routes

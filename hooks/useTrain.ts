@@ -1,7 +1,7 @@
-import type { TrainMessage, WorkerMessage } from '@/workers/training.worker'
 import { loggerError, loggerInfo } from '@api/utils/logger'
 import { useCallback, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import type { TrainMessage, WorkerMessage } from '@/workers/training.worker'
 
 export type TrainResult = {
   params: number[]
@@ -12,14 +12,24 @@ export type TrainPhase = 'idle' | 'converting' | 'training'
 
 export default function useTrain() {
   const [phase, setPhase] = useState<TrainPhase>('idle')
-  const [shortTerm, setShortTerm] = useState<TrainResult>({ params: [], progress: 0 })
-  const [longTerm, setLongTerm] = useState<TrainResult>({ params: [], progress: 0 })
+  const [shortTerm, setShortTerm] = useState<TrainResult>({
+    params: [],
+    progress: 0,
+  })
+  const [longTerm, setLongTerm] = useState<TrainResult>({
+    params: [],
+    progress: 0,
+  })
   const [fsrsItems, setFsrsItems] = useState(0)
   const [trainTime, setTrainTime] = useState(0)
   const workerRef = useRef<Worker | null>(null)
 
   const startTrain = useCallback(
-    (csvData: ArrayBuffer, timezone: string, nextDayStartsAt: number): Promise<void> => {
+    (
+      csvData: ArrayBuffer,
+      timezone: string,
+      nextDayStartsAt: number
+    ): Promise<void> => {
       setPhase('converting')
       setShortTerm({ params: [], progress: 0 })
       setLongTerm({ params: [], progress: 0 })
@@ -31,15 +41,20 @@ export default function useTrain() {
         if (!workerRef.current) {
           workerRef.current = new Worker(
             new URL('../workers/training.worker.ts', import.meta.url),
-            { type: 'module' },
+            { type: 'module' }
           )
         }
         const worker = workerRef.current
 
         const sendTrainMessage = () => {
           worker.postMessage(
-            { type: 'train', csvData, timezone, nextDayStartsAt } satisfies TrainMessage,
-            [csvData],
+            {
+              type: 'train',
+              csvData,
+              timezone,
+              nextDayStartsAt,
+            } satisfies TrainMessage,
+            [csvData]
           )
         }
 
@@ -91,11 +106,12 @@ export default function useTrain() {
         }
       })
     },
-    [],
+    []
   )
 
   const isTraining = phase !== 'idle'
-  const isDone = () => shortTerm.params.length > 0 && longTerm.params.length > 0 && !isTraining
+  const isDone = () =>
+    shortTerm.params.length > 0 && longTerm.params.length > 0 && !isTraining
 
   const clear = () => {
     setShortTerm({ params: [], progress: 0 })

@@ -7,7 +7,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "biome check .",
+    "format": "biome format --write ."
   },
   "dependencies": {
     "@hono/zod-validator": "^0.4.3",
@@ -36,22 +37,14 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3",
-    "@next/eslint-plugin-next": "^15.1.7",
+    "@biomejs/biome": "2.4.8",
     "@tailwindcss/postcss": "^4.0.8",
     "@types/node": "^22.x",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "15.1.7",
-    "eslint-config-prettier": "^10.0.1",
-    "eslint-plugin-react-hooks": "^5.1.0",
-    "eslint-plugin-simple-import-sort": "^12.1.1",
     "postcss": "^8",
-    "prettier": "^3.5.2",
     "tailwindcss": "^4.0.8",
-    "typescript": "^5",
-    "typescript-eslint": "^8.24.1"
+    "typescript": "^5"
   },
   "pnpm": {
     "ignoredBuiltDependencies": [
