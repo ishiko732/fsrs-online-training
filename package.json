@@ -11,8 +11,7 @@
   },
   "dependencies": {
     "@hono/zod-validator": "^0.4.3",
-    "@open-spaced-repetition/binding": "https://pkg.pr.new/@open-spaced-repetition/binding@fe71943",
-    "@open-spaced-repetition/binding-wasm32-wasi": "https://pkg.pr.new/@open-spaced-repetition/binding-wasm32-wasi@fe71943",
+    "@open-spaced-repetition/binding": "^0.2.1",
     "@radix-ui/react-dialog": "^1.1.6",
     "@radix-ui/react-label": "^2.1.2",
     "@radix-ui/react-popover": "^1.1.6",

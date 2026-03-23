@@ -30,9 +30,13 @@ export default function useTrainFSRS({ enableShortTerm, setError, doneCallback }
 
       try {
         if (!apiRef.current) {
-          const worker = new Worker(new URL('../workers/training.worker.ts', import.meta.url), { type: 'module' })
+          const workerUrl = new URL('../workers/training.worker.ts', import.meta.url)
+          console.log('[useTrain] Creating worker from:', workerUrl.href)
+          const worker = new Worker(workerUrl, { type: 'module' })
+          worker.onerror = (e) => console.error('[useTrain] Worker error:', e)
           apiRef.current = Comlink.wrap<TrainingApi>(worker)
         }
+        console.log('[useTrain] Calling worker.train...')
 
         const result = await apiRef.current.train(
           new Uint8Array(csvData),
