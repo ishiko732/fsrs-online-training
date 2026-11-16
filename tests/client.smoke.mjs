@@ -108,16 +108,39 @@ before(async () => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], {
     origin: server.baseUrl,
   })
-  // Observe (not replace) the app's worker messages.
+  // Observe (not replace) the app's worker messages. Pages that set
+  // window.__holdDone get the worker's final 'done' delivered to the app only
+  // when the test calls window.__releaseDone(), after the results rendered.
   await context.addInitScript(() => {
     const NativeWorker = window.Worker
     window.__workers = 0
     window.__events = []
+    window.__heldDone = []
+    window.__doneDelivered = 0
+    window.__releaseDone = () => {
+      for (const deliver of window.__heldDone.splice(0)) deliver()
+    }
     window.Worker = class extends NativeWorker {
       constructor(...args) {
         super(...args)
         window.__workers++
         this.addEventListener('message', (e) => window.__events.push(e.data))
+      }
+      set onmessage(handler) {
+        super.onmessage =
+          handler &&
+          ((e) => {
+            if (e.data?.type !== 'done') return handler.call(this, e)
+            const deliver = () => {
+              window.__doneDelivered++
+              handler.call(this, e)
+            }
+            if (window.__holdDone) window.__heldDone.push(deliver)
+            else deliver()
+          })
+      }
+      get onmessage() {
+        return super.onmessage
       }
     }
   })
@@ -138,29 +161,29 @@ after(async () => {
 const events = (type, p = page) =>
   p.evaluate((t) => window.__events.filter((e) => e.type === t), type)
 
-const modelTrigger = () => page.locator('#model-version')
+const modelTrigger = (p = page) => p.locator('#model-version')
 
-async function selectModel(modelVersion) {
-  await modelTrigger().click()
-  await page.getByRole('option', { name: modelVersion }).click()
-  assert.equal(await modelTrigger().textContent(), modelVersion)
+async function selectModel(modelVersion, p = page) {
+  await modelTrigger(p).click()
+  await p.getByRole('option', { name: modelVersion }).click()
+  assert.equal(await modelTrigger(p).textContent(), modelVersion)
 }
 
-async function upload(file, expect) {
-  const before = (await events(expect)).length
-  const dropzone = page.locator('div.border-dashed')
-  await page.waitForFunction(
+async function upload(file, expect, p = page) {
+  const before = (await events(expect, p)).length
+  const dropzone = p.locator('div.border-dashed')
+  await p.waitForFunction(
     (el) => !el.className.includes('cursor-not-allowed'),
     await dropzone.elementHandle()
   )
   // Click like a user: react-dropzone clears the input before opening the
   // dialog, so re-selecting the same file still triggers a new run.
   const [chooser] = await Promise.all([
-    page.waitForEvent('filechooser'),
+    p.waitForEvent('filechooser'),
     dropzone.click(),
   ])
   await chooser.setFiles(file)
-  await page.waitForFunction(
+  await p.waitForFunction(
     ([t, n]) => window.__events.filter((e) => e.type === t).length > n,
     [expect, before],
     { timeout: 120_000 }
@@ -293,8 +316,50 @@ test('reports invalid CSV and recovers on retry', async () => {
   assert.equal(await page.evaluate(() => window.__workers), 2)
 })
 
+const CALLBACK_META = {
+  tz: 'UTC',
+  nextDayStartAt: 4,
+  total_rows: 0,
+  total_cards: 0,
+  total_fsrs_items: 0,
+}
+
+function expectedCallbackBody(modelVersion) {
+  const [on, off] = expected[modelVersion]
+  return modelVersion === 'FSRS-7'
+    ? {
+        model_version: 'FSRS-7',
+        ...CALLBACK_META,
+        penalties_enabled_params: on,
+        penalties_disabled_params: off,
+      }
+    : { ...CALLBACK_META, short_term_params: on, long_term_params: off }
+}
+
+// Finishes training number `index` on a page holding 'done': the results are
+// rendered while still training, no callback is sent, then releasing 'done'
+// sends exactly one callback whose receipt is awaited.
+async function finishHeldTraining(p, index, modelVersion, callbackPath) {
+  await p.waitForFunction(() => window.__heldDone.length === 1)
+  assert.equal((await events('training-complete', p)).length, 2 * index + 2)
+  await p.getByText(`Training ${modelVersion} ... 100%`).waitFor()
+  assert.equal(await p.evaluate(() => window.__doneDelivered), index)
+  assert.equal(received.length, index, 'callback sent before done')
+
+  const request = p.waitForRequest(
+    (r) => r.method() === 'POST' && new URL(r.url()).pathname === callbackPath
+  )
+  await p.evaluate(() => window.__releaseDone())
+  const response = await (await request).response()
+  assert.equal(response.status(), 200)
+  assert.equal(await p.evaluate(() => window.__doneDelivered), index + 1)
+  assert.equal(received.length, index + 1)
+  assert.equal((await renderedResults(p)).model, modelVersion)
+}
+
 for (const modelVersion of ['FSRS-6', 'FSRS-7']) {
-  test(`${modelVersion} hash callback: direct and proxied bodies match`, async () => {
+  const next = modelVersion === 'FSRS-6' ? 'FSRS-7' : 'FSRS-6'
+  test(`${modelVersion} hash callback fires once per training after a delayed done, direct and proxied`, async () => {
     const local = `http://127.0.0.1:${receiver.address().port}`
     const bodies = {}
     for (const callbackOnClient of ['1', '0']) {
@@ -309,43 +374,37 @@ for (const modelVersion of ['FSRS-6', 'FSRS-7']) {
       })
       // Omitting modelVersion must keep the FSRS-6 default.
       if (modelVersion === 'FSRS-7') hash.set('modelVersion', modelVersion)
-      const { p } = await openPage(`${server.baseUrl}/#${hash}`)
-      for (let i = 0; i < 600 && received.length === 0; i++) await sleep(200)
-      assert.equal(received.length, 1, 'callback was not received')
-      const [{ origin, body }] = received
+      const callbackPath =
+        callbackOnClient === '1' ? '/hook' : '/api/support/callback'
+      const p = await context.newPage()
+      p.on('pageerror', (err) => pageErrors.push(err))
+      await p.addInitScript(() => {
+        window.__holdDone = true
+      })
+      await p.goto(`${server.baseUrl}/#${hash}`)
+
+      await finishHeldTraining(p, 0, modelVersion, callbackPath)
+      assert.equal(await modelTrigger(p).textContent(), modelVersion)
+      // Rapid second training with the other model on the same page.
+      await selectModel(next, p)
+      await upload(validCsv, 'convert-complete', p)
+      await finishHeldTraining(p, 1, next, callbackPath)
+
       // Direct callbacks come from the page, proxied ones from the server.
-      assert.equal(
-        origin,
-        callbackOnClient === '1' ? server.baseUrl : undefined
-      )
-      assert.equal(
-        await p.locator('#model-version').textContent(),
-        modelVersion
-      )
-      assert.equal((await renderedResults(p)).model, modelVersion)
-      bodies[callbackOnClient] = body
+      for (const { origin } of received) {
+        assert.equal(
+          origin,
+          callbackOnClient === '1' ? server.baseUrl : undefined
+        )
+      }
+      bodies[callbackOnClient] = received.map((r) => r.body)
       await p.close()
     }
 
-    const meta = {
-      tz: 'UTC',
-      nextDayStartAt: 4,
-      total_rows: 0,
-      total_cards: 0,
-      total_fsrs_items: 0,
-    }
-    const [on, off] = expected[modelVersion]
-    assert.deepEqual(
-      bodies['1'],
-      modelVersion === 'FSRS-7'
-        ? {
-            model_version: 'FSRS-7',
-            ...meta,
-            penalties_enabled_params: on,
-            penalties_disabled_params: off,
-          }
-        : { ...meta, short_term_params: on, long_term_params: off }
-    )
+    assert.deepEqual(bodies['1'], [
+      expectedCallbackBody(modelVersion),
+      expectedCallbackBody(next),
+    ])
     assert.deepEqual(bodies['0'], bodies['1'])
     assert.deepEqual(pageErrors, [])
   })

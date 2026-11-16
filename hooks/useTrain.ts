@@ -15,6 +15,13 @@ export type TrainResult = {
 
 export type TrainPhase = 'idle' | 'converting' | 'training'
 
+// Snapshot of one finished training, resolved once when the worker is done.
+export type TrainOutcome = {
+  modelVersion: ModelVersion
+  enabledParams: number[]
+  disabledParams: number[]
+}
+
 const isEnabledRun = (run: TrainRun) =>
   run.modelVersion === 'FSRS-7' ? run.enableSchedPenalties : run.enableShortTerm
 
@@ -23,11 +30,11 @@ export default function useTrain() {
   // Model of the latest training; results never follow the current selector.
   const [modelVersion, setModelVersion] = useState<ModelVersion>('FSRS-6')
   // FSRS-6: short-term on/off. FSRS-7: scheduling penalties on/off.
-  const [enabled, setEnabled] = useState<TrainResult>({
+  const [enabledResult, setEnabledResult] = useState<TrainResult>({
     params: [],
     progress: 0,
   })
-  const [disabled, setDisabled] = useState<TrainResult>({
+  const [disabledResult, setDisabledResult] = useState<TrainResult>({
     params: [],
     progress: 0,
   })
@@ -43,16 +50,21 @@ export default function useTrain() {
       timezone: string,
       nextDayStartsAt: number,
       modelVersion: ModelVersion
-    ): Promise<void> => {
+    ): Promise<TrainOutcome> => {
       setPhase('converting')
       setModelVersion(modelVersion)
-      setEnabled({ params: [], progress: 0 })
-      setDisabled({ params: [], progress: 0 })
+      setEnabledResult({ params: [], progress: 0 })
+      setDisabledResult({ params: [], progress: 0 })
       setFsrsItems(0)
       setTrainTime(0)
       const start = performance.now()
+      const outcome: TrainOutcome = {
+        modelVersion,
+        enabledParams: [],
+        disabledParams: [],
+      }
 
-      return new Promise<void>((resolve, reject) => {
+      return new Promise<TrainOutcome>((resolve, reject) => {
         if (!workerRef.current) {
           workerReadyRef.current = false
           workerRef.current = new Worker(
@@ -105,13 +117,19 @@ export default function useTrain() {
               break
             case 'progress': {
               const value = msg.total > 0 ? (msg.current / msg.total) * 100 : 0
-              const setter = isEnabledRun(msg) ? setEnabled : setDisabled
+              const setter = isEnabledRun(msg)
+                ? setEnabledResult
+                : setDisabledResult
               setter((prev) => ({ ...prev, progress: value || 0 }))
               break
             }
             case 'training-complete': {
-              const setter = isEnabledRun(msg) ? setEnabled : setDisabled
+              const setter = isEnabledRun(msg)
+                ? setEnabledResult
+                : setDisabledResult
               setter({ params: msg.parameters, progress: 100 })
+              if (isEnabledRun(msg)) outcome.enabledParams = msg.parameters
+              else outcome.disabledParams = msg.parameters
               loggerInfo('train-done', {
                 tag: 'finish',
                 ...msg,
@@ -121,7 +139,7 @@ export default function useTrain() {
             case 'done':
               setTrainTime(performance.now() - start)
               setPhase('idle')
-              resolve()
+              resolve(outcome)
               break
             case 'error':
               disposeWorker()
@@ -143,11 +161,13 @@ export default function useTrain() {
 
   const isTraining = phase !== 'idle'
   const isDone = () =>
-    enabled.params.length > 0 && disabled.params.length > 0 && !isTraining
+    enabledResult.params.length > 0 &&
+    disabledResult.params.length > 0 &&
+    !isTraining
 
   const clear = () => {
-    setEnabled({ params: [], progress: 0 })
-    setDisabled({ params: [], progress: 0 })
+    setEnabledResult({ params: [], progress: 0 })
+    setDisabledResult({ params: [], progress: 0 })
     setFsrsItems(0)
     setPhase('idle')
     setTrainTime(0)
@@ -155,8 +175,8 @@ export default function useTrain() {
 
   return {
     modelVersion,
-    enabled,
-    disabled,
+    enabledResult,
+    disabledResult,
     fsrsItems,
     isTraining,
     phase,

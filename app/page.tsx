@@ -76,8 +76,8 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null)
   const {
     modelVersion,
-    enabled,
-    disabled,
+    enabledResult,
+    disabledResult,
     fsrsItems,
     isTraining,
     phase,
@@ -95,18 +95,6 @@ export default function Home() {
       toast.loading('Training...', { id: toastIdRef.current })
     }
   }, [phase])
-
-  // Fire callback when both trainings complete
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally fire only when params change
-  useEffect(() => {
-    if (!isDone() || !container.url) return
-    const body = callbackBody(modelVersion, enabled.params, disabled.params)
-    toast.promise(handleCallback({ url: container.url, body }), {
-      loading: 'Callback...',
-      success: 'Callback success',
-      error: 'Callback failed',
-    })
-  }, [enabled.params, disabled.params])
 
   const handleCallback = (body: TCallback) => {
     if (!callbackOnClientRef.current) {
@@ -140,9 +128,21 @@ export default function Home() {
     toastIdRef.current = toast.loading('Converting CSV...')
 
     train(csvBuffer, tz, nextDayStartAt, modelVersion)
-      .then(() =>
+      .then((outcome) => {
         toast.success('Training completed', { id: toastIdRef.current })
-      )
+        // Fire the callback exactly once per finished training.
+        if (!container.url) return
+        const body = callbackBody(
+          outcome.modelVersion,
+          outcome.enabledParams,
+          outcome.disabledParams
+        )
+        toast.promise(handleCallback({ url: container.url, body }), {
+          loading: 'Callback...',
+          success: 'Callback success',
+          error: 'Callback failed',
+        })
+      })
       .catch((e) =>
         toast.error(`Training failed: ${e.message}`, { id: toastIdRef.current })
       )
@@ -236,7 +236,7 @@ export default function Home() {
   })
 
   const merge_progress =
-    +((enabled.progress + disabled.progress) / 2).toFixed(6) || 0
+    +((enabledResult.progress + disabledResult.progress) / 2).toFixed(6) || 0
   const [enabledLabel, disabledLabel] = RESULT_LABELS[modelVersion]
   const merge_train_time = +(trainTime / 1000).toFixed(3)
   const offset_hour = Math.floor(get_timezone_offset(tz) / 60)
@@ -428,7 +428,7 @@ export default function Home() {
                     </div>
                     <div className="sm:col-span-2 text-left">
                       <CopyParams
-                        array={enabled.params}
+                        array={enabledResult.params}
                         modelVersion={modelVersion}
                         enable_short_term={true}
                         unique_key="enabled"
@@ -449,7 +449,7 @@ export default function Home() {
                     </div>
                     <div className="sm:col-span-2 text-left">
                       <CopyParams
-                        array={disabled.params}
+                        array={disabledResult.params}
                         modelVersion={modelVersion}
                         enable_short_term={modelVersion === 'FSRS-7'}
                         unique_key="disabled"
