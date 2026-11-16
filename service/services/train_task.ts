@@ -17,6 +17,8 @@ import type { Context } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import {
   DEFAULT_MAXIMUM_INTERVAL,
+  default_enable_fuzz,
+  default_request_retention,
   defaultLearningSteps,
   defaultRelearningSteps,
 } from 'ts-fsrs'
@@ -99,10 +101,10 @@ function outputParams(formData: TTrainFormData, w: number[]) {
     }
   }
   return {
-    request_retention: 0.9,
+    request_retention: default_request_retention,
     maximum_interval: DEFAULT_MAXIMUM_INTERVAL,
     w: normalizeFsrs6Weights(w, formData.enable_short_term),
-    enable_fuzz: false,
+    enable_fuzz: default_enable_fuzz,
     enable_short_term: formData.enable_short_term,
     learning_steps: [...defaultLearningSteps],
     relearning_steps: [...defaultRelearningSteps],
