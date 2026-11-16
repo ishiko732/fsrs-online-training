@@ -11,7 +11,6 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, before, test } from 'node:test'
-import { setTimeout as sleep } from 'node:timers/promises'
 
 import { chromium } from 'playwright'
 
@@ -238,12 +237,32 @@ async function assertTrainedRun(runIndex, modelVersion) {
 
 const VISUALIZER =
   'https://open-spaced-repetition.github.io/anki_fsrs_visualizer/'
-const visualizerWeights = (w) => w.map((a) => a.toFixed(4)).join(',')
 
-async function copyFirstResult() {
-  await page.getByRole('button', { name: 'Copy' }).first().click()
-  await page.getByRole('button', { name: 'Copied!' }).waitFor()
-  return page.evaluate(() => navigator.clipboard.readText())
+// Copies result card `index` and checks the clipboard and the visualizer link
+// with the explicit model, all weights and the card's short-term flag.
+async function copyResult(modelVersion, index, enableShortTerm) {
+  const w = expected[modelVersion][index]
+  const button = page
+    .locator('dt', { hasText: 'Optimized Parameters' })
+    .locator('button')
+    .nth(index)
+  await button.click()
+  await page.waitForFunction(
+    (el) => el.textContent === 'Copied!',
+    await button.elementHandle()
+  )
+  assert.equal(
+    await page.evaluate(() => navigator.clipboard.readText()),
+    w.join(', ')
+  )
+  const href = `${VISUALIZER}?a=${modelVersion.toLowerCase()}&w=${w
+    .map((a) => a.toFixed(4))
+    .join(',')}&m=0.9&e=${enableShortTerm ? 1 : 0}`
+  const link = page.locator(`a[href="${href}"]`)
+  await link.waitFor()
+  const params = new URL(await link.getAttribute('href')).searchParams
+  assert.equal(params.get('a'), modelVersion.toLowerCase())
+  assert.equal(params.get('w').split(',').length, WEIGHTS[modelVersion])
 }
 
 test('page is served without cross-origin isolation', async () => {
@@ -267,11 +286,8 @@ test('FSRS-6 trains short-term on/off in the worker', async () => {
     'wasm32-wasip1 module was not fetched'
   )
 
-  const [w] = expected['FSRS-6']
-  assert.equal(await copyFirstResult(), w.join(', '))
-  await page
-    .locator(`a[href="${VISUALIZER}?w=${visualizerWeights(w)}&m=0.9&e=1"]`)
-    .waitFor()
+  await copyResult('FSRS-6', 0, true)
+  await copyResult('FSRS-6', 1, false)
 })
 
 test('FSRS-7 trains scheduling penalties on/off with the same worker', async () => {
@@ -280,15 +296,10 @@ test('FSRS-7 trains scheduling penalties on/off with the same worker', async () 
   await assertTrainedRun(1, 'FSRS-7')
   assert.equal(await page.evaluate(() => window.__workers), 1)
 
-  // Copy works; no visualizer link is offered for FSRS-7 weights.
-  const [w] = expected['FSRS-7']
-  assert.equal(await copyFirstResult(), w.join(', '))
-  await sleep(500)
-  assert.equal(
-    await page.locator(`a[href*="w=${visualizerWeights(w)}&"]`).count(),
-    0,
-    'visualizer link offered for FSRS-7'
-  )
+  // Both FSRS-7 cards link the visualizer with a=fsrs-7 and all 34 weights;
+  // FSRS-7 always trains with short-term enabled.
+  await copyResult('FSRS-7', 0, true)
+  await copyResult('FSRS-7', 1, true)
 })
 
 test('results keep the trained model when the selector changes', async () => {

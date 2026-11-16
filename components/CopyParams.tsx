@@ -29,14 +29,12 @@ export default function CopyParams({
       success: () => {
         setIsCopied(true)
         setTimeout(() => setIsCopied(false), 2000)
-        // The visualizer only supports FSRS-6 weights.
-        if (modelVersion !== 'FSRS-6') return 'Copied!'
         setTimeout(() => {
           toast(
             <p>
               {`You can open the visualizer through this link: `}
               <a
-                href={`https://open-spaced-repetition.github.io/anki_fsrs_visualizer/?w=${array.map((a) => a.toFixed(4)).join(',')}&m=${0.9}&e=${enable_short_term ? 1 : 0}`}
+                href={`https://open-spaced-repetition.github.io/anki_fsrs_visualizer/?a=${modelVersion.toLowerCase()}&w=${array.map((a) => a.toFixed(4)).join(',')}&m=${0.9}&e=${enable_short_term ? 1 : 0}`}
                 className="text-blue-500 underline"
                 target="_blank"
                 rel="noopener"

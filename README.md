@@ -70,7 +70,8 @@ FSRS-7 adds `model_version` and reports the penalty comparison instead:
 ```
 
 `callbackOnClient=1` posts from the browser; otherwise the server proxies the
-same body. The anki fsrs visualizer link is offered for FSRS-6 weights only.
+same body. Copying a result also offers an anki fsrs visualizer link that
+names the model explicitly (`a=fsrs-6` or `a=fsrs-7`) with all its weights.
 
 ## Service-Side
 
