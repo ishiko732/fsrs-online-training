@@ -2,61 +2,15 @@
 // Uses raw postMessage because Turbopack module workers don't support Comlink.
 // A "ready" handshake is required: Turbopack swallows messages sent before init completes.
 
+// Threadless WASI Preview 1 build: no cross-origin isolation needed, and the
+// synchronous compute stays off the main thread inside this dedicated worker.
 import {
   computeParameters,
   convertCsvToFsrsItems,
-} from '@open-spaced-repetition/binding'
+} from '@open-spaced-repetition/binding-wasm32-wasip1'
 
-const offsetCache = new Map<string, number>()
-const formatterCache = new Map<string, Intl.DateTimeFormat>()
-
-function getTimezoneOffset(ms: number, timezone: string): number {
-  // Cache by UTC day — offsets only change at DST boundaries (a few times/year)
-  const dayKey = `${timezone}:${Math.floor(ms / 86400000)}`
-  const cached = offsetCache.get(dayKey)
-  if (cached !== undefined) return cached
-
-  let fmt = formatterCache.get(timezone)
-  if (!fmt) {
-    fmt = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    })
-    formatterCache.set(timezone, fmt)
-  }
-
-  const date = new Date(ms)
-  const parts = fmt.formatToParts(date)
-  const get = (type: string) =>
-    parseInt(parts.find((p) => p.type === type)?.value || '0', 10)
-
-  const utcTime = Date.UTC(
-    date.getUTCFullYear(),
-    date.getUTCMonth(),
-    date.getUTCDate(),
-    date.getUTCHours(),
-    date.getUTCMinutes(),
-    date.getUTCSeconds()
-  )
-  const tzTime = Date.UTC(
-    get('year'),
-    get('month') - 1,
-    get('day'),
-    get('hour'),
-    get('minute'),
-    get('second')
-  )
-
-  const offset = Math.floor((tzTime - utcTime) / 60000)
-  offsetCache.set(dayKey, offset)
-  return offset
-}
+// ts-fsrs 5.x schedules with FSRS-6 weights; binding defaults to FSRS-7.
+const MODEL_VERSION = 'FSRS-6'
 
 export type TrainMessage = {
   type: 'train'
@@ -91,7 +45,7 @@ self.onmessage = async (e: MessageEvent<TrainMessage>) => {
       new Uint8Array(csvData),
       nextDayStartsAt,
       timezone,
-      getTimezoneOffset
+      MODEL_VERSION
     )
     self.postMessage({
       type: 'convert-complete',
@@ -101,6 +55,7 @@ self.onmessage = async (e: MessageEvent<TrainMessage>) => {
     for (const enableShortTerm of [true, false]) {
       const parameters = await computeParameters(items, {
         enableShortTerm,
+        modelVersion: MODEL_VERSION,
         progress: (current: number, total: number) => {
           self.postMessage({
             type: 'progress',

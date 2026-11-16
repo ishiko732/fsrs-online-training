@@ -23,55 +23,8 @@ type ProgressFunction = (
   total: number
 ) => void
 
-const offsetCache = new Map<string, number>()
-const formatterCache = new Map<string, Intl.DateTimeFormat>()
-
-function getTimezoneOffset(ms: number, timezone: string): number {
-  const dayKey = `${timezone}:${Math.floor(ms / 86400000)}`
-  const cached = offsetCache.get(dayKey)
-  if (cached !== undefined) return cached
-
-  let fmt = formatterCache.get(timezone)
-  if (!fmt) {
-    fmt = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    })
-    formatterCache.set(timezone, fmt)
-  }
-
-  const date = new Date(ms)
-  const parts = fmt.formatToParts(date)
-  const get = (type: string) =>
-    parseInt(parts.find((p) => p.type === type)?.value || '0', 10)
-
-  const utcTime = Date.UTC(
-    date.getUTCFullYear(),
-    date.getUTCMonth(),
-    date.getUTCDate(),
-    date.getUTCHours(),
-    date.getUTCMinutes(),
-    date.getUTCSeconds()
-  )
-  const tzTime = Date.UTC(
-    get('year'),
-    get('month') - 1,
-    get('day'),
-    get('hour'),
-    get('minute'),
-    get('second')
-  )
-
-  const offset = Math.floor((tzTime - utcTime) / 60000)
-  offsetCache.set(dayKey, offset)
-  return offset
-}
+// ts-fsrs 5.x schedules with FSRS-6 weights; binding defaults to FSRS-7.
+const MODEL_VERSION = 'FSRS-6'
 
 function basicProgress(
   enableShortTerm: boolean,
@@ -92,6 +45,7 @@ async function computeParametersWrapper(
 ) {
   const optimizedParameters = await bindingComputeParameters(fsrsItems, {
     enableShortTerm,
+    modelVersion: MODEL_VERSION,
     progress: (current: number, total: number) => {
       progress(enableShortTerm, current, total)
     },
@@ -112,6 +66,7 @@ export async function evaluate(
   optimizedParameters: number[],
   fsrsItems: FSRSBindingItem[]
 ) {
+  // An explicit 21-weight FSRS-6 vector keeps FSRSBinding on FSRS-6.
   const model = new FSRSBinding(optimizedParameters)
   return new Promise<ModelEvaluation>((resolve, reject) => {
     try {
@@ -129,7 +84,7 @@ async function csvToFsrsItems(
 ) {
   const arrayBuffer = await file.arrayBuffer()
   const csvData = new Uint8Array(arrayBuffer)
-  return convertCsvToFsrsItems(csvData, hourOffset, timezone, getTimezoneOffset)
+  return convertCsvToFsrsItems(csvData, hourOffset, timezone, MODEL_VERSION)
 }
 
 export async function trainByFormData<Ctx extends Context>(

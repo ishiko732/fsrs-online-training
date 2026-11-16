@@ -8,11 +8,15 @@
     "build": "next build",
     "start": "next start",
     "lint": "biome check .",
-    "format": "biome format --write ."
+    "format": "biome format --write .",
+    "test": "node --test tests/unit.test.mjs",
+    "test:server": "node tests/server.smoke.mjs",
+    "test:client": "node tests/client.smoke.mjs"
   },
   "dependencies": {
-    "@hono/zod-validator": "^0.4.3",
-    "@open-spaced-repetition/binding": "^0.2.1",
+    "@hono/zod-validator": "^0.9.1",
+    "@open-spaced-repetition/binding": "^0.6.1",
+    "@open-spaced-repetition/binding-wasm32-wasip1": "^0.6.1",
     "@radix-ui/react-dialog": "^1.1.6",
     "@radix-ui/react-label": "^2.1.2",
     "@radix-ui/react-popover": "^1.1.6",
@@ -22,9 +26,9 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "1.1.1",
-    "hono": "^4.12.34",
+    "hono": "^4.13.19",
     "lucide-react": "^0.475.0",
-    "next": "16.2.11",
+    "next": "16.4.6",
     "next-themes": "^0.4.4",
     "pino": "^9.6.0",
     "react": "^19.0.0",
@@ -34,7 +38,7 @@
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",
     "ts-fsrs": "^5.3.1",
-    "zod": "^3.24.2"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.8",
@@ -42,7 +46,8 @@
     "@types/node": "^22.x",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "postcss": "^8",
+    "playwright": "^1.65.1",
+    "postcss": "^8.5.33",
     "tailwindcss": "^4.0.8",
     "typescript": "^5"
   },
@@ -58,7 +63,7 @@
     }
   },
   "engines": {
-    "node:": ">=22",
+    "node": ">=24",
     "pnpm": ">=9"
   },
   "packageManager": "pnpm@9.15.0"
