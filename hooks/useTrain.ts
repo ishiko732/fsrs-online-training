@@ -124,12 +124,13 @@ export default function useTrain() {
               break
             }
             case 'training-complete': {
-              const setter = isEnabledRun(msg)
-                ? setEnabledResult
-                : setDisabledResult
-              setter({ params: msg.parameters, progress: 100 })
-              if (isEnabledRun(msg)) outcome.enabledParams = msg.parameters
-              else outcome.disabledParams = msg.parameters
+              if (isEnabledRun(msg)) {
+                setEnabledResult({ params: msg.parameters, progress: 100 })
+                outcome.enabledParams = msg.parameters
+              } else {
+                setDisabledResult({ params: msg.parameters, progress: 100 })
+                outcome.disabledParams = msg.parameters
+              }
               loggerInfo('train-done', {
                 tag: 'finish',
                 ...msg,
