@@ -15,7 +15,15 @@ import {
 } from '@open-spaced-repetition/binding'
 import type { Context } from 'hono'
 import { streamSSE } from 'hono/streaming'
-import { generatorParameters } from 'ts-fsrs'
+import {
+  DEFAULT_MAXIMUM_INTERVAL,
+  defaultLearningSteps,
+  defaultRelearningSteps,
+} from 'ts-fsrs'
+import {
+  clipFSRS6Parameters,
+  migrateFSRS6Parameters,
+} from 'ts-fsrs/models/fsrs-6'
 
 import type { ProgressValue } from './types'
 
@@ -77,7 +85,11 @@ async function csvToFsrsItems(
   )
 }
 
-// ts-fsrs 5.x only represents FSRS-6, so FSRS-7 weights bypass it.
+function normalizeFsrs6Weights(w: number[], enableShortTerm: boolean) {
+  return migrateFSRS6Parameters(clipFSRS6Parameters(w, 1, enableShortTerm))
+}
+
+// FSRS-6 returns the legacy parameter envelope; FSRS-7 weights bypass it.
 function outputParams(formData: TTrainFormData, w: number[]) {
   if (formData.model_version === 'FSRS-7') {
     return {
@@ -86,10 +98,15 @@ function outputParams(formData: TTrainFormData, w: number[]) {
       enable_sched_penalties: formData.enable_sched_penalties,
     }
   }
-  return generatorParameters({
-    w,
+  return {
+    request_retention: 0.9,
+    maximum_interval: DEFAULT_MAXIMUM_INTERVAL,
+    w: normalizeFsrs6Weights(w, formData.enable_short_term),
+    enable_fuzz: false,
     enable_short_term: formData.enable_short_term,
-  })
+    learning_steps: [...defaultLearningSteps],
+    relearning_steps: [...defaultRelearningSteps],
+  }
 }
 
 export async function trainByFormData<Ctx extends Context>(
@@ -223,7 +240,7 @@ export async function evaluateByFormData<Ctx extends Context>(
   const w =
     modelVersion === 'FSRS-7'
       ? formData.w
-      : generatorParameters({ w: formData.w }).w
+      : normalizeFsrs6Weights(formData.w, true)
   if (fsrs_items.items.length === 0) {
     return c.json({ error: `No valid FSRS items found` }, 400)
   }
