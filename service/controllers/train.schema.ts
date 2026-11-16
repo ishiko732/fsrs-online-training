@@ -1,10 +1,10 @@
-import { ZodIssueCode, z } from 'zod'
+import { z } from 'zod'
 
 export const WeightSchema = z.string().transform((s, ctx) => {
   const result = s.replace('[', '').replace(']', '').split(',').map(Number)
-  if (result.some(isNaN)) {
+  if (result.some(Number.isNaN)) {
     ctx.addIssue({
-      code: ZodIssueCode.custom,
+      code: 'custom',
       message: 'Invalid number in array',
     })
     return z.NEVER
@@ -19,7 +19,7 @@ export const TrainFormData = z.object({
     .string()
     .transform((v) => v === '1')
     .optional()
-    .default('1'),
+    .default(true),
   hour_offset: z
     .string()
     .optional()
@@ -28,7 +28,7 @@ export const TrainFormData = z.object({
     .string()
     .transform((v) => v === '1')
     .optional()
-    .default('1'),
+    .default(true),
 })
 
 export const EvaluateFormData = z.object({
@@ -43,7 +43,7 @@ export const EvaluateFormData = z.object({
     .string()
     .transform((v) => v === '1')
     .optional()
-    .default('1'),
+    .default(true),
 })
 
 export type TTrainFormData = z.infer<typeof TrainFormData>

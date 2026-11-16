@@ -23,6 +23,8 @@ export default function useTrain() {
   const [fsrsItems, setFsrsItems] = useState(0)
   const [trainTime, setTrainTime] = useState(0)
   const workerRef = useRef<Worker | null>(null)
+  // The worker posts 'ready' only once, so a reused worker must not wait again.
+  const workerReadyRef = useRef(false)
 
   const startTrain = useCallback(
     (
@@ -39,12 +41,22 @@ export default function useTrain() {
 
       return new Promise<void>((resolve, reject) => {
         if (!workerRef.current) {
+          workerReadyRef.current = false
           workerRef.current = new Worker(
             new URL('../workers/training.worker.ts', import.meta.url),
             { type: 'module' }
           )
         }
         const worker = workerRef.current
+
+        // Start the next run from a fresh worker and WASM instance.
+        const disposeWorker = () => {
+          worker.terminate()
+          if (workerRef.current === worker) {
+            workerRef.current = null
+            workerReadyRef.current = false
+          }
+        }
 
         const sendTrainMessage = () => {
           worker.postMessage(
@@ -59,8 +71,9 @@ export default function useTrain() {
         }
 
         worker.onerror = (e) => {
+          disposeWorker()
           setPhase('idle')
-          reject(new Error(e.message))
+          reject(new Error(e.message || 'Training worker failed to load'))
         }
 
         worker.onmessage = (e: MessageEvent<WorkerMessage>) => {
@@ -69,6 +82,7 @@ export default function useTrain() {
 
           switch (msg.type) {
             case 'ready':
+              workerReadyRef.current = true
               sendTrainMessage()
               break
             case 'convert-complete':
@@ -97,12 +111,17 @@ export default function useTrain() {
               resolve()
               break
             case 'error':
+              disposeWorker()
               setPhase('idle')
               toast.error(`Training failed: ${msg.message}`)
               loggerError('train-error', { error: msg.message })
               reject(new Error(msg.message))
               break
           }
+        }
+
+        if (workerReadyRef.current) {
+          sendTrainMessage()
         }
       })
     },

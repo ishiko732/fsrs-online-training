@@ -80,3 +80,22 @@ curl --location 'https://ishiko732-fsrs-online-training.hf.space/api/train/evalu
 ```
 
 ![evaluate](images/evaluate.png)
+
+## Development
+
+Requires Node.js 24 or newer. The server trains with the native
+`@open-spaced-repetition/binding`; the browser trains in a dedicated Worker with
+the threadless `@open-spaced-repetition/binding-wasm32-wasip1`, so no
+cross-origin isolation (COOP/COEP) headers are needed. Both use FSRS-6 (21
+weights), matching ts-fsrs 5.x.
+
+```bash
+pnpm install --frozen-lockfile
+pnpm build
+pnpm test             # schema, native vs wasip1 conversion, FSRS-6 training
+pnpm run test:server  # standalone build: native binding, JSON/SSE train, evaluate
+pnpm exec playwright install chromium  # once, for test:client
+pnpm run test:client  # standalone build in Chromium: Worker training, retry
+```
+
+Tests use synthetic review logs only.
