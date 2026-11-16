@@ -1,3 +1,4 @@
+import type { ModelVersion } from '@open-spaced-repetition/binding'
 import { z } from 'zod'
 
 export const HashObject = z.object({
@@ -18,4 +19,8 @@ export const HashObject = z.object({
     .optional()
     .default(false)
     .transform((v) => !!v),
+  modelVersion: z
+    .enum(['FSRS-6', 'FSRS-7'] as const satisfies readonly `${ModelVersion}`[])
+    .optional()
+    .default('FSRS-6'),
 })

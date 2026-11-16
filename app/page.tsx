@@ -10,6 +10,13 @@ import TimezoneSelector from '@components/timezones'
 import { Input } from '@components/ui/input'
 import { Label } from '@components/ui/label'
 import { Progress } from '@components/ui/progress'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@components/ui/select'
 import useTrain from '@hooks/useTrain'
 import { hc } from 'hono/client'
 import { FileText, Upload } from 'lucide-react'
@@ -18,30 +25,59 @@ import { useDropzone } from 'react-dropzone'
 import { toast } from 'sonner'
 
 import type { AppType } from '@/app/api/[[...route]]/route'
+import type { ModelVersion } from '@/workers/training.worker'
 
 const client = hc<AppType>('/')
 
-const container: TCallback = {
+const container = {
   url: '',
-  body: {
+  meta: {
     tz: '',
     nextDayStartAt: 0,
     total_rows: 0,
     total_cards: 0,
     total_fsrs_items: 0,
-    short_term_params: [],
-    long_term_params: [],
   },
+}
+
+// Labels of the [enabled, disabled] comparison results per model.
+const RESULT_LABELS: Record<ModelVersion, [string, string]> = {
+  'FSRS-6': ['Short-Term', 'Long-Term'],
+  'FSRS-7': ['Scheduling Penalties On', 'Scheduling Penalties Off'],
+}
+
+function callbackBody(
+  modelVersion: ModelVersion,
+  enabledParams: number[],
+  disabledParams: number[]
+): TCallback['body'] {
+  if (modelVersion === 'FSRS-7') {
+    return {
+      model_version: modelVersion,
+      ...container.meta,
+      penalties_enabled_params: enabledParams,
+      penalties_disabled_params: disabledParams,
+    }
+  }
+  // FSRS-6 keeps the legacy callback body.
+  return {
+    ...container.meta,
+    short_term_params: enabledParams,
+    long_term_params: disabledParams,
+  }
 }
 
 export default function Home() {
   const [draftTz, setDraftTz] = useState<string>(currentTz)
   const [tz, setTz] = useState<string>(currentTz)
   const [draftNextDayStartAt, setDraftNextDayStartAt] = useState<number>(4)
+  const [draftModelVersion, setDraftModelVersion] =
+    useState<ModelVersion>('FSRS-6')
   const [error, setError] = useState<string | null>(null)
   const {
-    shortTerm,
-    longTerm,
+    modelVersion,
+    enabled,
+    disabled,
     fsrsItems,
     isTraining,
     phase,
@@ -64,14 +100,13 @@ export default function Home() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally fire only when params change
   useEffect(() => {
     if (!isDone() || !container.url) return
-    container.body.short_term_params = shortTerm.params
-    container.body.long_term_params = longTerm.params
-    toast.promise(handleCallback(container), {
+    const body = callbackBody(modelVersion, enabled.params, disabled.params)
+    toast.promise(handleCallback({ url: container.url, body }), {
       loading: 'Callback...',
       success: 'Callback success',
       error: 'Callback failed',
     })
-  }, [shortTerm.params, longTerm.params])
+  }, [enabled.params, disabled.params])
 
   const handleCallback = (body: TCallback) => {
     if (!callbackOnClientRef.current) {
@@ -79,12 +114,12 @@ export default function Home() {
         json: body,
       })
     }
-    return fetch(container.url, {
+    return fetch(body.url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(body.body),
       signal: AbortSignal.timeout(20000 /* 20s */),
     })
   }
@@ -92,20 +127,19 @@ export default function Home() {
   const handleTrain = async (
     file: File,
     tz: string,
-    nextDayStartAt: number
+    nextDayStartAt: number,
+    modelVersion: ModelVersion
   ) => {
     setError(null)
     setTz(tz)
     clear()
-    container.body.short_term_params = []
-    container.body.long_term_params = []
-    container.body.tz = tz
-    container.body.nextDayStartAt = nextDayStartAt
+    container.meta.tz = tz
+    container.meta.nextDayStartAt = nextDayStartAt
 
     const csvBuffer = await file.arrayBuffer()
     toastIdRef.current = toast.loading('Converting CSV...')
 
-    train(csvBuffer, tz, nextDayStartAt)
+    train(csvBuffer, tz, nextDayStartAt, modelVersion)
       .then(() =>
         toast.success('Training completed', { id: toastIdRef.current })
       )
@@ -138,11 +172,13 @@ export default function Home() {
         nextDayStartAt: +(urlSearch.get('nextDayStartAt') || 4),
         callback: urlSearch.get('callback') || undefined,
         callbackOnClient: urlSearch.get('callbackOnClient') === '1',
+        modelVersion: urlSearch.get('modelVersion') || undefined,
       })
       if (hashObject.success) {
         setTz(hashObject.data.tz)
         setDraftTz(hashObject.data.tz)
         setDraftNextDayStartAt(hashObject.data.nextDayStartAt)
+        setDraftModelVersion(hashObject.data.modelVersion)
         if (hashObject.data.callback) {
           container.url = hashObject.data.callback
           callbackOnClientRef.current = hashObject.data.callbackOnClient
@@ -156,7 +192,8 @@ export default function Home() {
               handleTrain(
                 file,
                 hashObject.data.tz,
-                hashObject.data.nextDayStartAt
+                hashObject.data.nextDayStartAt,
+                hashObject.data.modelVersion
               )
               return 'CSV Fetched'
             },
@@ -186,7 +223,7 @@ export default function Home() {
       setError('Please upload a CSV file')
       return
     }
-    await handleTrain(file, draftTz, draftNextDayStartAt)
+    await handleTrain(file, draftTz, draftNextDayStartAt, draftModelVersion)
   }
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -199,7 +236,8 @@ export default function Home() {
   })
 
   const merge_progress =
-    +((shortTerm.progress + longTerm.progress) / 2).toFixed(6) || 0
+    +((enabled.progress + disabled.progress) / 2).toFixed(6) || 0
+  const [enabledLabel, disabledLabel] = RESULT_LABELS[modelVersion]
   const merge_train_time = +(trainTime / 1000).toFixed(3)
   const offset_hour = Math.floor(get_timezone_offset(tz) / 60)
   return (
@@ -224,9 +262,7 @@ export default function Home() {
             >
               Timezone
             </Label>
-            <label className="text-sm text-gray-500">
-              The timezone of the user.
-            </label>
+            <p className="text-sm text-gray-500">The timezone of the user.</p>
           </div>
           <TimezoneSelector
             tz={draftTz}
@@ -244,9 +280,9 @@ export default function Home() {
             >
               Next Day Start At
             </label>
-            <label className="text-sm text-gray-500">
+            <p className="text-sm text-gray-500">
               The hour of the day when the next day starts.
-            </label>
+            </p>
           </div>
           <Input
             type="number"
@@ -259,6 +295,38 @@ export default function Home() {
             disabled={isTraining}
             className="w-full mt-1 block sm:w-1/2 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
           />
+        </div>
+
+        {/* Model Version */}
+        <div className="mb-4 sm:flex justify-between sm:items-center">
+          <div className="flex flex-col">
+            <Label
+              htmlFor="model-version"
+              className="text-sm font-medium text-gray-700"
+            >
+              Model Version
+            </Label>
+            <p className="text-sm text-gray-500">
+              FSRS-6 compares short-term on/off; FSRS-7 compares scheduling
+              penalties on/off.
+            </p>
+          </div>
+          <Select
+            value={draftModelVersion}
+            onValueChange={(v) => setDraftModelVersion(v as ModelVersion)}
+            disabled={isTraining}
+          >
+            <SelectTrigger
+              id="model-version"
+              className="w-full mt-1 sm:w-1/2 border-gray-300"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="FSRS-6">FSRS-6</SelectItem>
+              <SelectItem value="FSRS-7">FSRS-7</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div
           {...getRootProps()}
@@ -313,7 +381,7 @@ export default function Home() {
             <p className="mt-2 text-sm text-gray-500 text-center">
               {phase === 'converting'
                 ? 'Converting CSV...'
-                : `Training ... ${merge_progress}%`}
+                : `Training ${modelVersion} ... ${merge_progress}%`}
             </p>
           </div>
         )}
@@ -337,6 +405,14 @@ export default function Home() {
                     </dt>
                     <dd className="mt-1 text-sm text-gray-900">{fsrsItems}</dd>
                   </div>
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">
+                      Model Version
+                    </dt>
+                    <dd className="mt-1 text-sm text-gray-900">
+                      {modelVersion}
+                    </dd>
+                  </div>
                 </div>
               </div>
               <div className="sm:flex justify-between">
@@ -346,12 +422,16 @@ export default function Home() {
                       <dt className="text-sm font-medium text-gray-500">
                         Train Model
                       </dt>
-                      <dd className="mt-1 text-sm text-gray-900">Short-Term</dd>
+                      <dd className="mt-1 text-sm text-gray-900">
+                        {enabledLabel}
+                      </dd>
                     </div>
                     <div className="sm:col-span-2 text-left">
                       <CopyParams
-                        array={shortTerm.params}
+                        array={enabled.params}
+                        modelVersion={modelVersion}
                         enable_short_term={true}
+                        unique_key="enabled"
                       />
                     </div>
                   </dl>
@@ -363,12 +443,16 @@ export default function Home() {
                       <dt className="text-sm font-medium text-gray-500">
                         Train Model
                       </dt>
-                      <dd className="mt-1 text-sm text-gray-900">Long-Term</dd>
+                      <dd className="mt-1 text-sm text-gray-900">
+                        {disabledLabel}
+                      </dd>
                     </div>
                     <div className="sm:col-span-2 text-left">
                       <CopyParams
-                        array={longTerm.params}
-                        enable_short_term={false}
+                        array={disabled.params}
+                        modelVersion={modelVersion}
+                        enable_short_term={modelVersion === 'FSRS-7'}
+                        unique_key="disabled"
                       />
                     </div>
                   </dl>

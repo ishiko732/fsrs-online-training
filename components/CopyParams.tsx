@@ -3,15 +3,21 @@ import { cn } from '@lib/utils'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import type { ModelVersion } from '@/workers/training.worker'
+
 import FormatArray from './FormatArray'
 
 export default function CopyParams({
   array,
+  modelVersion,
   enable_short_term,
+  unique_key,
   className,
 }: {
   array: number[]
+  modelVersion: ModelVersion
   enable_short_term: boolean
+  unique_key: string
   className?: string
 }) {
   const [isCopied, setIsCopied] = useState(false)
@@ -23,6 +29,8 @@ export default function CopyParams({
       success: () => {
         setIsCopied(true)
         setTimeout(() => setIsCopied(false), 2000)
+        // The visualizer only supports FSRS-6 weights.
+        if (modelVersion !== 'FSRS-6') return 'Copied!'
         setTimeout(() => {
           toast(
             <p>
@@ -49,6 +57,7 @@ export default function CopyParams({
       <dt className={cn('text-sm font-medium text-gray-500', className)}>
         Optimized Parameters
         <button
+          type="button"
           onClick={handleCopy}
           className={`ml-2 px-4 py-2 text-xs font-medium text-white bg-blue-500 rounded hover:bg-blue-600 transition-all ${
             isCopied ? 'animate-pulse' : ''
@@ -60,7 +69,7 @@ export default function CopyParams({
       <dd className="mt-1 text-sm text-gray-900">
         <FormatArray
           array={array}
-          unique_key={enable_short_term ? 'short' : 'long'}
+          unique_key={unique_key}
           isCopied={isCopied}
         />
       </dd>

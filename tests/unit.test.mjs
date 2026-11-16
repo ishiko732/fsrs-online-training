@@ -1,11 +1,14 @@
 // Deterministic regression checks: Zod 4 form semantics, native vs wasm32-wasip1
-// CSV conversion (study-day rollover + DST), and FSRS-6 training output.
+// CSV conversion (study-day rollover + DST, card IDs), and FSRS-6/FSRS-7
+// training output.
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { describe, test } from 'node:test'
 
+import { Callback } from '../service/controllers/support.ts'
 import {
   EvaluateFormData,
+  modelVersionOfWeights,
   TrainFormData,
 } from '../service/controllers/train.schema.ts'
 import { HashObject } from '../service/services/hash_parse.ts'
@@ -18,6 +21,8 @@ const runtimes = { native, wasip1 }
 const MODEL_VERSION = 'FSRS-6'
 const encode = (s) => new TextEncoder().encode(s)
 const file = () => new File(['x'], 'revlog.csv')
+const weights = (n) => `[${Array.from({ length: n }, (_, i) => i / 10 + 0.1)}]`
+const W21 = weights(21)
 
 describe('TrainFormData / EvaluateFormData (zod 4)', () => {
   test('defaults when optional fields are omitted', () => {
@@ -26,7 +31,41 @@ describe('TrainFormData / EvaluateFormData (zod 4)', () => {
     assert.equal(data.enable_short_term, true)
     assert.equal(data.sse, true)
     assert.equal(data.hour_offset, 4)
-    assert.equal(EvaluateFormData.parse({ file: file(), w: '1' }).sse, true)
+    assert.equal(data.model_version, 'FSRS-6')
+    assert.equal(data.enable_sched_penalties, false)
+    assert.equal(EvaluateFormData.parse({ file: file(), w: W21 }).sse, true)
+  })
+
+  test('model_version and normalized flags', () => {
+    const parse = (fields) => TrainFormData.parse({ file: file(), ...fields })
+    // FSRS-7 always trains with short-term enabled.
+    const v7 = parse({
+      model_version: 'FSRS-7',
+      enable_short_term: '0',
+      enable_sched_penalties: '1',
+    })
+    assert.equal(v7.model_version, 'FSRS-7')
+    assert.equal(v7.enable_short_term, true)
+    assert.equal(v7.enable_sched_penalties, true)
+    assert.equal(
+      parse({ model_version: 'FSRS-7' }).enable_sched_penalties,
+      false
+    )
+    // FSRS-6 ignores penalties and keeps enable_short_term.
+    const v6 = parse({
+      model_version: 'FSRS-6',
+      enable_short_term: '0',
+      enable_sched_penalties: '1',
+    })
+    assert.equal(v6.enable_short_term, false)
+    assert.equal(v6.enable_sched_penalties, false)
+    for (const model_version of ['FSRS-5', 'fsrs-7', '7', '']) {
+      assert.equal(
+        TrainFormData.safeParse({ file: file(), model_version }).success,
+        false,
+        model_version
+      )
+    }
   })
 
   test('explicit 0/1 flags', () => {
@@ -42,7 +81,7 @@ describe('TrainFormData / EvaluateFormData (zod 4)', () => {
       assert.equal(data.enable_short_term, expected)
       assert.equal(data.sse, expected)
       assert.equal(
-        EvaluateFormData.parse({ file: file(), w: '1', sse: value }).sse,
+        EvaluateFormData.parse({ file: file(), w: W21, sse: value }).sse,
         expected
       )
     }
@@ -59,13 +98,45 @@ describe('TrainFormData / EvaluateFormData (zod 4)', () => {
   test('rejects missing or invalid files', () => {
     assert.equal(TrainFormData.safeParse({}).success, false)
     assert.equal(TrainFormData.safeParse({ file: 'revlog.csv' }).success, false)
-    assert.equal(EvaluateFormData.safeParse({ w: '1' }).success, false)
+    assert.equal(EvaluateFormData.safeParse({ w: W21 }).success, false)
   })
 
-  test('parses weights and rejects invalid weights', () => {
-    const ok = EvaluateFormData.parse({ file: file(), w: '[0.4, 1.2,3]' })
-    assert.deepEqual(ok.w, [0.4, 1.2, 3])
-    for (const w of ['[0.4,abc]', undefined, 42]) {
+  test('parses weights of supported lengths and infers the model', () => {
+    const ok = EvaluateFormData.parse({
+      file: file(),
+      w: `[0.4, 1.2,${weights(19).slice(1)}`,
+    })
+    assert.deepEqual(ok.w.slice(0, 3), [0.4, 1.2, 0.1])
+    assert.equal(ok.w.length, 21)
+    for (const [n, model] of [
+      [17, 'FSRS-6'],
+      [19, 'FSRS-6'],
+      [21, 'FSRS-6'],
+      [34, 'FSRS-7'],
+    ]) {
+      const { w } = EvaluateFormData.parse({ file: file(), w: weights(n) })
+      assert.equal(w.length, n)
+      assert.equal(modelVersionOfWeights(w), model)
+    }
+  })
+
+  test('rejects non-finite weights and unsupported lengths', () => {
+    const w21 = W21.slice(1, -1).split(',')
+    const invalid = [
+      '[0.4,abc]',
+      `[${[...w21.slice(1), 'Infinity']}]`,
+      `[${[...w21.slice(1), '-Infinity']}]`,
+      `[${[...w21.slice(1), 'NaN']}]`,
+      '1',
+      '',
+      weights(20),
+      weights(22),
+      weights(33),
+      weights(35),
+      undefined,
+      42,
+    ]
+    for (const w of invalid) {
       assert.equal(
         EvaluateFormData.safeParse({ file: file(), w }).success,
         false,
@@ -92,6 +163,53 @@ describe('HashObject (zod 4)', () => {
       true
     )
     assert.equal(HashObject.safeParse({ csv: 'a.csv' }).success, false)
+  })
+
+  test('modelVersion defaults to FSRS-6', () => {
+    const parse = (modelVersion) =>
+      HashObject.safeParse({ csv: 'a.csv', tz: 'UTC', modelVersion })
+    assert.equal(parse(undefined).data.modelVersion, 'FSRS-6')
+    assert.equal(parse('FSRS-6').data.modelVersion, 'FSRS-6')
+    assert.equal(parse('FSRS-7').data.modelVersion, 'FSRS-7')
+    assert.equal(parse('FSRS-5').success, false)
+  })
+})
+
+describe('Callback schema', () => {
+  const meta = {
+    tz: 'UTC',
+    nextDayStartAt: 4,
+    total_rows: 0,
+    total_cards: 0,
+    total_fsrs_items: 0,
+  }
+  const numbers = (n) => Array.from({ length: n }, (_, i) => i / 10)
+  const parse = (body) => Callback.safeParse({ url: 'http://x', body })
+
+  test('legacy FSRS-6 body is accepted unchanged', () => {
+    const body = {
+      ...meta,
+      short_term_params: numbers(21),
+      long_term_params: numbers(21),
+    }
+    assert.deepEqual(parse(body).data.body, body)
+  })
+
+  test('FSRS-7 body keeps model_version and penalty results', () => {
+    const body = {
+      model_version: 'FSRS-7',
+      ...meta,
+      penalties_enabled_params: numbers(34),
+      penalties_disabled_params: numbers(34),
+    }
+    assert.deepEqual(parse(body).data.body, body)
+    for (const bad of [
+      { ...body, penalties_enabled_params: numbers(21) },
+      { ...body, model_version: 'FSRS-6' },
+      { ...body, tz: undefined },
+    ]) {
+      assert.equal(parse(bad).success, false)
+    }
   })
 })
 
@@ -172,28 +290,146 @@ describe('CSV conversion: native vs wasm32-wasip1', () => {
   })
 })
 
-describe('FSRS-6 training', () => {
-  const csv = encode(syntheticRevlogCsv({ cards: 400 }))
+describe('CSV conversion with card IDs', () => {
+  const csv = encode(syntheticRevlogCsv())
 
+  for (const modelVersion of ['FSRS-6', 'FSRS-7']) {
+    test(`${modelVersion}: items and cardIds stay aligned in both runtimes`, () => {
+      const [a, b] = [native, wasip1].map((binding) =>
+        binding.convertCsvToFsrsItemsWithCardIds(
+          csv,
+          4,
+          'Asia/Shanghai',
+          modelVersion
+        )
+      )
+      for (const { items, cardIds } of [a, b]) {
+        assert.ok(items.length > 0)
+        assert.equal(cardIds.length, items.length)
+        assert.ok(cardIds.every(Number.isInteger))
+      }
+      assert.deepEqual(a.cardIds, b.cardIds)
+      assert.deepEqual(describeItems(a.items), describeItems(b.items))
+      // Same items as the legacy converter of the same model.
+      assert.deepEqual(
+        describeItems(a.items),
+        describeItems(
+          native.convertCsvToFsrsItems(csv, 4, 'Asia/Shanghai', modelVersion)
+        )
+      )
+    })
+  }
+
+  test('FSRS-7 conversion keeps fractional same-day intervals', () => {
+    const convert = (modelVersion) =>
+      native.convertCsvToFsrsItemsWithCardIds(
+        encode(boundaryCsv),
+        4,
+        'America/New_York',
+        modelVersion
+      ).items
+    const deltas = (items) =>
+      items.flatMap((i) => i.reviews.map((r) => r.deltaT))
+    assert.ok(deltas(convert('FSRS-6')).every(Number.isInteger))
+    assert.ok(!deltas(convert('FSRS-7')).every(Number.isInteger))
+  })
+})
+
+const fixture = encode(syntheticRevlogCsv({ cards: 400 }))
+const train = (binding, options) => {
+  const { items, cardIds } = binding.convertCsvToFsrsItemsWithCardIds(
+    fixture,
+    4,
+    'UTC',
+    options.modelVersion
+  )
+  return binding.computeParameters(items, { ...options, cardIds })
+}
+
+function assertModel(binding, w, length, modelVersion) {
+  assert.equal(w.length, length)
+  assert.ok(w.every(Number.isFinite), `non-finite weight in ${w}`)
+  const { items, cardIds } = binding.convertCsvToFsrsItemsWithCardIds(
+    fixture,
+    4,
+    'UTC',
+    modelVersion
+  )
+  const metrics = new binding.FSRSBinding(w).evaluate(items, cardIds)
+  assert.ok(Number.isFinite(metrics.logLoss))
+  assert.ok(Number.isFinite(metrics.rmseBins))
+}
+
+describe('FSRS-6 training', () => {
   for (const [name, binding] of Object.entries(runtimes)) {
     for (const enableShortTerm of [true, false]) {
       test(`${name} enableShortTerm=${enableShortTerm} -> 21 finite weights`, async () => {
-        const items = binding.convertCsvToFsrsItems(
-          csv,
-          4,
-          'UTC',
-          MODEL_VERSION
-        )
-        const w = await binding.computeParameters(items, {
+        const w = await train(binding, {
           enableShortTerm,
           modelVersion: MODEL_VERSION,
         })
-        assert.equal(w.length, 21)
-        assert.ok(w.every(Number.isFinite), `non-finite weight in ${w}`)
-        const metrics = new binding.FSRSBinding(w).evaluate(items)
-        assert.ok(Number.isFinite(metrics.logLoss))
-        assert.ok(Number.isFinite(metrics.rmseBins))
+        assertModel(binding, w, 21, MODEL_VERSION)
       })
     }
   }
+
+  test('scheduling penalties are ignored', async () => {
+    const options = { enableShortTerm: true, modelVersion: MODEL_VERSION }
+    assert.deepEqual(
+      await train(native, { ...options, enableSchedPenalties: true }),
+      await train(native, options)
+    )
+  })
+})
+
+describe('FSRS-7 training', () => {
+  for (const [name, binding] of Object.entries(runtimes)) {
+    for (const enableSchedPenalties of [true, false]) {
+      test(`${name} enableSchedPenalties=${enableSchedPenalties} -> 34 finite weights`, async () => {
+        const w = await train(binding, {
+          enableShortTerm: true,
+          enableSchedPenalties,
+          modelVersion: 'FSRS-7',
+        })
+        assertModel(binding, w, 34, 'FSRS-7')
+      })
+    }
+  }
+
+  test('scheduling penalties change the weights', async () => {
+    const options = { enableShortTerm: true, modelVersion: 'FSRS-7' }
+    assert.notDeepEqual(
+      await train(native, { ...options, enableSchedPenalties: true }),
+      await train(native, { ...options, enableSchedPenalties: false })
+    )
+  })
+})
+
+describe('card IDs', () => {
+  test('mismatched cardIds are rejected by training and evaluation', async () => {
+    const { items, cardIds } = native.convertCsvToFsrsItemsWithCardIds(
+      fixture,
+      4,
+      'UTC',
+      MODEL_VERSION
+    )
+    const short = cardIds.slice(1)
+    await assert.rejects(
+      native.computeParameters(items, {
+        enableShortTerm: true,
+        modelVersion: MODEL_VERSION,
+        cardIds: short,
+      }),
+      /cardIds length must match items length/
+    )
+    const w = await native.computeParameters(items, {
+      enableShortTerm: true,
+      modelVersion: MODEL_VERSION,
+      cardIds,
+    })
+    assert.throws(
+      () => new native.FSRSBinding(w).evaluate(items, short),
+      /cardIds length must match items length/
+    )
+  })
 })

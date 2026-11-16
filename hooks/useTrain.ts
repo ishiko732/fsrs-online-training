@@ -1,7 +1,12 @@
 import { loggerError, loggerInfo } from '@api/utils/logger'
 import { useCallback, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import type { TrainMessage, WorkerMessage } from '@/workers/training.worker'
+import type {
+  ModelVersion,
+  TrainMessage,
+  TrainRun,
+  WorkerMessage,
+} from '@/workers/training.worker'
 
 export type TrainResult = {
   params: number[]
@@ -10,13 +15,19 @@ export type TrainResult = {
 
 export type TrainPhase = 'idle' | 'converting' | 'training'
 
+const isEnabledRun = (run: TrainRun) =>
+  run.modelVersion === 'FSRS-7' ? run.enableSchedPenalties : run.enableShortTerm
+
 export default function useTrain() {
   const [phase, setPhase] = useState<TrainPhase>('idle')
-  const [shortTerm, setShortTerm] = useState<TrainResult>({
+  // Model of the latest training; results never follow the current selector.
+  const [modelVersion, setModelVersion] = useState<ModelVersion>('FSRS-6')
+  // FSRS-6: short-term on/off. FSRS-7: scheduling penalties on/off.
+  const [enabled, setEnabled] = useState<TrainResult>({
     params: [],
     progress: 0,
   })
-  const [longTerm, setLongTerm] = useState<TrainResult>({
+  const [disabled, setDisabled] = useState<TrainResult>({
     params: [],
     progress: 0,
   })
@@ -30,11 +41,13 @@ export default function useTrain() {
     (
       csvData: ArrayBuffer,
       timezone: string,
-      nextDayStartsAt: number
+      nextDayStartsAt: number,
+      modelVersion: ModelVersion
     ): Promise<void> => {
       setPhase('converting')
-      setShortTerm({ params: [], progress: 0 })
-      setLongTerm({ params: [], progress: 0 })
+      setModelVersion(modelVersion)
+      setEnabled({ params: [], progress: 0 })
+      setDisabled({ params: [], progress: 0 })
       setFsrsItems(0)
       setTrainTime(0)
       const start = performance.now()
@@ -65,6 +78,7 @@ export default function useTrain() {
               csvData,
               timezone,
               nextDayStartsAt,
+              modelVersion,
             } satisfies TrainMessage,
             [csvData]
           )
@@ -91,17 +105,16 @@ export default function useTrain() {
               break
             case 'progress': {
               const value = msg.total > 0 ? (msg.current / msg.total) * 100 : 0
-              const setter = msg.enableShortTerm ? setShortTerm : setLongTerm
+              const setter = isEnabledRun(msg) ? setEnabled : setDisabled
               setter((prev) => ({ ...prev, progress: value || 0 }))
               break
             }
             case 'training-complete': {
-              const setter = msg.enableShortTerm ? setShortTerm : setLongTerm
+              const setter = isEnabledRun(msg) ? setEnabled : setDisabled
               setter({ params: msg.parameters, progress: 100 })
               loggerInfo('train-done', {
                 tag: 'finish',
-                enableShortTerm: msg.enableShortTerm,
-                params: msg.parameters,
+                ...msg,
               })
               break
             }
@@ -130,19 +143,20 @@ export default function useTrain() {
 
   const isTraining = phase !== 'idle'
   const isDone = () =>
-    shortTerm.params.length > 0 && longTerm.params.length > 0 && !isTraining
+    enabled.params.length > 0 && disabled.params.length > 0 && !isTraining
 
   const clear = () => {
-    setShortTerm({ params: [], progress: 0 })
-    setLongTerm({ params: [], progress: 0 })
+    setEnabled({ params: [], progress: 0 })
+    setDisabled({ params: [], progress: 0 })
     setFsrsItems(0)
     setPhase('idle')
     setTrainTime(0)
   }
 
   return {
-    shortTerm,
-    longTerm,
+    modelVersion,
+    enabled,
+    disabled,
     fsrsItems,
     isTraining,
     phase,
