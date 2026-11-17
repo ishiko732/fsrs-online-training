@@ -5,6 +5,17 @@ import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { describe, test } from 'node:test'
 
+import {
+  DEFAULT_MAXIMUM_INTERVAL,
+  defaultLearningSteps,
+  defaultRelearningSteps,
+} from 'ts-fsrs'
+import {
+  clipFSRS6Parameters,
+  FSRS6_DEFAULT_WEIGHTS,
+  migrateFSRS6Parameters,
+} from 'ts-fsrs/models/fsrs-6'
+
 import { Callback } from '../service/controllers/support.ts'
 import {
   EvaluateFormData,
@@ -430,6 +441,109 @@ describe('card IDs', () => {
     assert.throws(
       () => new native.FSRSBinding(w).evaluate(items, short),
       /cardIds length must match items length/
+    )
+  })
+})
+
+describe('FSRS-6 parameter normalization (v5 baseline)', () => {
+  test('nondeprecated defaults match legacy v5 defaults', () => {
+    assert.equal(DEFAULT_MAXIMUM_INTERVAL, 36500)
+    assert.deepEqual([...defaultLearningSteps], ['1m', '10m'])
+    assert.deepEqual([...defaultRelearningSteps], ['10m'])
+    assert.equal(FSRS6_DEFAULT_WEIGHTS.length, 21)
+  })
+
+  test('normal 17/19/21 vectors normalize to pinned v5 baseline', () => {
+    const w19 = [
+      0.40255, 1.18385, 3.173, 15.69105, 7.1949, 0.5345, 1.4604, 0.0046,
+      1.54575, 0.1192, 1.01925, 1.9395, 0.11, 0.29605, 2.2698, 0.2315, 2.9898,
+      0.51655, 0.6621,
+    ]
+    const w17 = w19.slice(0, 17)
+    const w21 = [...FSRS6_DEFAULT_WEIGHTS]
+
+    assert.deepEqual(
+      migrateFSRS6Parameters(clipFSRS6Parameters(w19, 1, true)),
+      [
+        0.40255, 1.18385, 3.173, 15.69105, 7.1949, 0.5345, 1.4604, 0.0046,
+        1.54575, 0.1192, 1.01925, 1.9395, 0.11, 0.29605, 2.2698, 0.2315, 2.9898,
+        0.51655, 0.6621, 0, 0.5,
+      ]
+    )
+    assert.deepEqual(
+      migrateFSRS6Parameters(clipFSRS6Parameters(w17, 1, true)),
+      [
+        0.40255, 1.18385, 3.173, 15.69105, 8.2639, 0.31895223, 1.9604, 0.0046,
+        1.54575, 0.1192, 1.01925, 1.9395, 0.11, 0.29605, 2.2698, 0.2315, 2.9898,
+        0, 0, 0, 0.5,
+      ]
+    )
+    assert.deepEqual(
+      migrateFSRS6Parameters(clipFSRS6Parameters(w21, 1, true)),
+      w21
+    )
+  })
+
+  test('OOB 17 input clips before migration and is not re-clipped after', () => {
+    const oob17 = [
+      0.1, 1.1, 2.1, 3.1, 20, -1, 10, 0.75, 4.5, 0.8, 3.5, 5, 0.25, 0.9, 4, 1,
+      6,
+    ]
+    const expected = [
+      0.1, 1.1, 2.1, 3.1, 10.002, 0.0009985, 4.5, 0.75, 4.5, 0.8, 3.5, 5, 0.25,
+      0.9, 4, 1, 6, 0, 0, 0, 0.5,
+    ]
+    const actual = migrateFSRS6Parameters(clipFSRS6Parameters(oob17, 1, true))
+    assert.deepEqual(actual, expected)
+    // Input is not mutated and post-migration re-clipping would alter w4/w5/w6/w19.
+    assert.equal(oob17[4], 20)
+    assert.notDeepEqual(clipFSRS6Parameters(actual, 1, true), expected)
+  })
+
+  test('OOB 19 and 21 inputs clip before migration and honor short-term flag on w19', () => {
+    const oob19 = [
+      0, 150, 2.1, 3.1, 20, -1, 10, 0.9, 5, 1, 4, 6, 0.5, 1, 5, 2, 7, 3, -1,
+    ]
+    assert.deepEqual(
+      migrateFSRS6Parameters(clipFSRS6Parameters(oob19, 1, true)),
+      [
+        0.001, 100, 2.1, 3.1, 10, 0.001, 4, 0.75, 4.5, 0.8, 3.5, 5, 0.25, 0.9,
+        4, 1, 6, 2, 0, 0, 0.5,
+      ]
+    )
+
+    const oob21 = [
+      0, 150, 2.1, 3.1, 20, -1, 10, 0.9, 5, 1, 4, 6, 0.5, 1, 5, 2, 7, 3, -1, 0,
+      0.05,
+    ]
+    assert.deepEqual(
+      migrateFSRS6Parameters(clipFSRS6Parameters(oob21, 1, true)),
+      [
+        0.001, 100, 2.1, 3.1, 10, 0.001, 4, 0.75, 4.5, 0.8, 3.5, 5, 0.25, 0.9,
+        4, 1, 6, 2, 0, 0.01, 0.1,
+      ]
+    )
+    assert.deepEqual(
+      migrateFSRS6Parameters(clipFSRS6Parameters(oob21, 1, false)),
+      [
+        0.001, 100, 2.1, 3.1, 10, 0.001, 4, 0.75, 4.5, 0.8, 3.5, 5, 0.25, 0.9,
+        4, 1, 6, 2, 0, 0, 0.1,
+      ]
+    )
+
+    const normal21WithZeroW19 = [...FSRS6_DEFAULT_WEIGHTS]
+    normal21WithZeroW19[19] = 0
+    assert.equal(
+      migrateFSRS6Parameters(
+        clipFSRS6Parameters(normal21WithZeroW19, 1, true)
+      )[19],
+      0.01
+    )
+    assert.equal(
+      migrateFSRS6Parameters(
+        clipFSRS6Parameters(normal21WithZeroW19, 1, false)
+      )[19],
+      0
     )
   })
 })

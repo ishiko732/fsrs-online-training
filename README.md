@@ -136,8 +136,9 @@ the threadless `@open-spaced-repetition/binding-wasm32-wasip1`, so no
 cross-origin isolation (COOP/COEP) headers are needed. Both convert CSV with
 `convertCsvToFsrsItemsWithCardIds` for the selected model and pass the card IDs
 to training and evaluation (card-aware windowed training, so weights differ
-from releases that trained without card IDs). ts-fsrs 5.x only represents
-FSRS-6, so FSRS-7 weights are returned without it.
+from releases that trained without card IDs). FSRS-6 responses preserve the
+legacy ts-fsrs parameter shape, while FSRS-7 weights are returned directly
+without FSRS-6 normalization.
 
 ```bash
 pnpm install --frozen-lockfile

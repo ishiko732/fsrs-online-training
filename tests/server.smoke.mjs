@@ -8,8 +8,6 @@ import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { after, before, test } from 'node:test'
 
-import { generatorParameters } from 'ts-fsrs'
-
 import { buildStandalone, removeApp, startServer } from './app.mjs'
 import { INVALID_CSV, syntheticRevlogCsv } from './fixtures.mjs'
 
@@ -119,7 +117,22 @@ test('standalone output loads the native binding', () => {
 })
 
 const trained = {}
-const fsrs6Keys = Object.keys(generatorParameters()).sort()
+const fsrs6Keys = [
+  'enable_fuzz',
+  'enable_short_term',
+  'learning_steps',
+  'maximum_interval',
+  'relearning_steps',
+  'request_retention',
+  'w',
+]
+const expectedFsrs6Defaults = {
+  request_retention: 0.9,
+  maximum_interval: 36500,
+  enable_fuzz: false,
+  learning_steps: ['1m', '10m'],
+  relearning_steps: ['10m'],
+}
 
 for (const enableShortTerm of ['1', '0']) {
   test(`FSRS-6 JSON train enable_short_term=${enableShortTerm}`, async () => {
@@ -133,6 +146,9 @@ for (const enableShortTerm of ['1', '0']) {
     assert.deepEqual(Object.keys(params).sort(), fsrs6Keys)
     assertWeights(params.w)
     assert.equal(params.enable_short_term, enableShortTerm === '1')
+    for (const [key, value] of Object.entries(expectedFsrs6Defaults)) {
+      assert.deepEqual(params[key], value)
+    }
     // Trained on the card-aware conversion: matches training with cardIds.
     const options = {
       modelVersion: 'FSRS-6',
@@ -167,6 +183,9 @@ test('SSE train with default flags', async () => {
   assert.deepEqual(Object.keys(done.data.params).sort(), fsrs6Keys)
   assertWeights(done.data.params.w)
   assert.equal(done.data.params.enable_short_term, true)
+  for (const [key, value] of Object.entries(expectedFsrs6Defaults)) {
+    assert.deepEqual(done.data.params[key], value)
+  }
   assertMetrics(done.data.metrics)
 })
 
@@ -252,17 +271,69 @@ test('evaluate accepts legacy 17/19-weight vectors (README example)', async () =
     0.1192, 1.01925, 1.9395, 0.11, 0.29605, 2.2698, 0.2315, 2.9898, 0.51655,
     0.6621,
   ]
-  for (const w of [w19, w19.slice(0, 17)]) {
+  const expected19As21 = [
+    0.40255, 1.18385, 3.173, 15.69105, 7.1949, 0.5345, 1.4604, 0.0046, 1.54575,
+    0.1192, 1.01925, 1.9395, 0.11, 0.29605, 2.2698, 0.2315, 2.9898, 0.51655,
+    0.6621, 0, 0.5,
+  ]
+  const expected17As21 = [
+    0.40255, 1.18385, 3.173, 15.69105, 8.2639, 0.31895223, 1.9604, 0.0046,
+    1.54575, 0.1192, 1.01925, 1.9395, 0.11, 0.29605, 2.2698, 0.2315, 2.9898, 0,
+    0, 0, 0.5,
+  ]
+  for (const [w, expected] of [
+    [w19, expected19As21],
+    [w19.slice(0, 17), expected17As21],
+  ]) {
     const res = await post(
       '/api/train/evaluate',
       form({ sse: '0', w: JSON.stringify(w) })
     )
     assert.equal(res.status, 200)
-    // Legacy vectors are migrated to 21 FSRS-6 weights by ts-fsrs.
-    assert.deepEqual(
-      await res.json(),
-      expectedMetrics([...generatorParameters({ w }).w], 'FSRS-6')
+    // Legacy vectors are normalized to pinned v5 21 FSRS-6 weights.
+    assert.deepEqual(await res.json(), expectedMetrics(expected, 'FSRS-6'))
+  }
+})
+
+test('evaluate normalizes OOB 17/19/21 FSRS-6 weights to pinned v5 baseline', async () => {
+  const oob17 = [
+    0.1, 1.1, 2.1, 3.1, 20, -1, 10, 0.75, 4.5, 0.8, 3.5, 5, 0.25, 0.9, 4, 1, 6,
+  ]
+  const expectedOob17 = [
+    0.1, 1.1, 2.1, 3.1, 10.002, 0.0009985, 4.5, 0.75, 4.5, 0.8, 3.5, 5, 0.25,
+    0.9, 4, 1, 6, 0, 0, 0, 0.5,
+  ]
+  const oob19 = [
+    0, 150, 2.1, 3.1, 20, -1, 10, 0.9, 5, 1, 4, 6, 0.5, 1, 5, 2, 7, 3, -1,
+  ]
+  const expectedOob19 = [
+    0.001, 100, 2.1, 3.1, 10, 0.001, 4, 0.75, 4.5, 0.8, 3.5, 5, 0.25, 0.9, 4, 1,
+    6, 2, 0, 0, 0.5,
+  ]
+  const oob21 = [
+    0, 150, 2.1, 3.1, 20, -1, 10, 0.9, 5, 1, 4, 6, 0.5, 1, 5, 2, 7, 3, -1, 0,
+    0.05,
+  ]
+  const expectedOob21 = [
+    0.001, 100, 2.1, 3.1, 10, 0.001, 4, 0.75, 4.5, 0.8, 3.5, 5, 0.25, 0.9, 4, 1,
+    6, 2, 0, 0.01, 0.1,
+  ]
+
+  for (const [w, expected, unclipped] of [
+    [oob17, expectedOob17, null],
+    [oob19, expectedOob19, [...oob19, 0, 0.5]],
+    [oob21, expectedOob21, oob21],
+  ]) {
+    const res = await post(
+      '/api/train/evaluate',
+      form({ sse: '0', w: JSON.stringify(w) })
     )
+    assert.equal(res.status, 200)
+    const metrics = await res.json()
+    assert.deepEqual(metrics, expectedMetrics(expected, 'FSRS-6'))
+    if (unclipped) {
+      assert.notDeepEqual(metrics, expectedMetrics(unclipped, 'FSRS-6'))
+    }
   }
 })
 
