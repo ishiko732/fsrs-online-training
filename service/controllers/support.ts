@@ -7,17 +7,31 @@ const Redirect = z.object({
   url: z.string(),
 })
 
-const Callback = z.object({
+const CallbackMeta = {
+  tz: z.string(),
+  nextDayStartAt: z.number(),
+  total_rows: z.number(),
+  total_cards: z.number(),
+  total_fsrs_items: z.number(),
+}
+
+// FSRS-6 keeps the legacy body without a model_version key.
+const Fsrs6CallbackBody = z.object({
+  ...CallbackMeta,
+  short_term_params: z.array(z.number()),
+  long_term_params: z.array(z.number()),
+})
+
+const Fsrs7CallbackBody = z.object({
+  model_version: z.literal('FSRS-7'),
+  ...CallbackMeta,
+  penalties_enabled_params: z.array(z.number()).length(34),
+  penalties_disabled_params: z.array(z.number()).length(34),
+})
+
+export const Callback = z.object({
   url: z.string(),
-  body: z.object({
-    tz: z.string(),
-    nextDayStartAt: z.number(),
-    total_rows: z.number(),
-    total_cards: z.number(),
-    total_fsrs_items: z.number(),
-    short_term_params: z.array(z.number()),
-    long_term_params: z.array(z.number()),
-  }),
+  body: z.union([Fsrs7CallbackBody, Fsrs6CallbackBody]),
 })
 
 export type TCallback = z.infer<typeof Callback>

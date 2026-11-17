@@ -1,9 +1,13 @@
 // Real-browser smoke of the shipped app: the page's own dedicated Worker loads
-// wasm32-wasip1 without cross-origin isolation, trains both short-term
-// settings twice in a row, reports an invalid CSV, and recovers on retry.
+// wasm32-wasip1 without cross-origin isolation, trains the two comparison
+// results of FSRS-6 (short-term on/off) and FSRS-7 (scheduling penalties
+// on/off) across model switches, reports an invalid CSV, recovers on retry,
+// and posts identical direct/proxied callbacks to a local receiver.
 // Run with `pnpm run test:client` (once: `pnpm exec playwright install chromium`).
 import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, before, test } from 'node:test'
@@ -13,100 +17,252 @@ import { chromium } from 'playwright'
 import { buildStandalone, removeApp, startServer } from './app.mjs'
 import { INVALID_CSV, syntheticRevlogCsv } from './fixtures.mjs'
 
+const csvText = syntheticRevlogCsv({ cards: 400 })
 const fixtureDir = mkdtempSync(join(tmpdir(), 'fsrs-csv-'))
 const validCsv = join(fixtureDir, 'revlog.csv')
 const invalidCsv = join(fixtureDir, 'invalid.csv')
-writeFileSync(validCsv, syntheticRevlogCsv({ cards: 400 }))
+writeFileSync(validCsv, csvText)
 writeFileSync(invalidCsv, INVALID_CSV)
+
+// The comparison runs of each model, in training order.
+const RUNS = {
+  'FSRS-6': [{ enableShortTerm: true }, { enableShortTerm: false }],
+  'FSRS-7': [{ enableSchedPenalties: true }, { enableSchedPenalties: false }],
+}
+const LABELS = {
+  'FSRS-6': ['Short-Term', 'Long-Term'],
+  'FSRS-7': ['Scheduling Penalties On', 'Scheduling Penalties Off'],
+}
+const WEIGHTS = { 'FSRS-6': 21, 'FSRS-7': 34 }
+
+// Expected worker output: the same wasip1 build trained on the card-aware
+// conversion (the page runs with timezone UTC and next day at 4).
+const wasip1 = createRequire(import.meta.url)(
+  '@open-spaced-repetition/binding-wasm32-wasip1'
+)
+const expected = {}
+const expectedWithoutIds = {}
+for (const modelVersion of Object.keys(RUNS)) {
+  const { items, cardIds } = wasip1.convertCsvToFsrsItemsWithCardIds(
+    new TextEncoder().encode(csvText),
+    4,
+    'UTC',
+    modelVersion
+  )
+  const train = (run, ids) =>
+    wasip1.computeParameters(items, {
+      modelVersion,
+      enableShortTerm: true,
+      ...run,
+      ...(ids && { cardIds: ids }),
+    })
+  expected[modelVersion] = []
+  expectedWithoutIds[modelVersion] = []
+  for (const run of RUNS[modelVersion]) {
+    expected[modelVersion].push(await train(run, cardIds))
+    expectedWithoutIds[modelVersion].push(await train(run))
+  }
+}
+
+// Local receiver for hash CSV downloads and callbacks; nothing leaves the host.
+const received = []
+const receiver = createServer((req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  if (req.method === 'OPTIONS') return res.writeHead(204).end()
+  if (req.method === 'GET') return res.end(csvText)
+  let body = ''
+  req.on('data', (chunk) => {
+    body += chunk
+  })
+  req.on('end', () => {
+    received.push({ origin: req.headers.origin, body: JSON.parse(body) })
+    res.end('ok')
+  })
+})
 
 let appDir
 let server
 let browser
+let context
 let page
 let navigation
 const wasmResponses = []
 const pageErrors = []
 
+async function openPage(url) {
+  const p = await context.newPage()
+  p.on('pageerror', (err) => pageErrors.push(err))
+  const response = await p.goto(url)
+  return { p, response }
+}
+
 before(async () => {
+  await new Promise((resolve) => receiver.listen(0, '127.0.0.1', resolve))
   appDir = buildStandalone()
   server = await startServer(appDir)
   browser = await chromium.launch()
-  const context = await browser.newContext()
-  // Observe (not replace) the app's worker messages.
+  context = await browser.newContext({ timezoneId: 'UTC' })
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], {
+    origin: server.baseUrl,
+  })
+  // Observe (not replace) the app's worker messages. Pages that set
+  // window.__holdDone get the worker's final 'done' delivered to the app only
+  // when the test calls window.__releaseDone(), after the results rendered.
   await context.addInitScript(() => {
     const NativeWorker = window.Worker
     window.__workers = 0
     window.__events = []
+    window.__heldDone = []
+    window.__doneDelivered = 0
+    window.__releaseDone = () => {
+      for (const deliver of window.__heldDone.splice(0)) deliver()
+    }
     window.Worker = class extends NativeWorker {
       constructor(...args) {
         super(...args)
         window.__workers++
         this.addEventListener('message', (e) => window.__events.push(e.data))
       }
+      set onmessage(handler) {
+        super.onmessage =
+          handler &&
+          ((e) => {
+            if (e.data?.type !== 'done') return handler.call(this, e)
+            const deliver = () => {
+              window.__doneDelivered++
+              handler.call(this, e)
+            }
+            if (window.__holdDone) window.__heldDone.push(deliver)
+            else deliver()
+          })
+      }
+      get onmessage() {
+        return super.onmessage
+      }
     }
   })
   context.on('response', (res) => {
     if (new URL(res.url()).pathname.endsWith('.wasm')) wasmResponses.push(res)
   })
-  page = await context.newPage()
-  page.on('pageerror', (err) => pageErrors.push(err))
-  navigation = await page.goto(server.baseUrl)
+  ;({ p: page, response: navigation } = await openPage(server.baseUrl))
 })
 
 after(async () => {
   await browser?.close()
   server?.stop()
+  receiver.close()
   if (appDir) removeApp(appDir)
   rmSync(fixtureDir, { recursive: true, force: true })
 })
 
-const events = (type) =>
-  page.evaluate((t) => window.__events.filter((e) => e.type === t), type)
+const events = (type, p = page) =>
+  p.evaluate((t) => window.__events.filter((e) => e.type === t), type)
 
-async function upload(file, expect) {
-  const before = (await events(expect)).length
-  const dropzone = page.locator('div.border-dashed')
-  await page.waitForFunction(
+const modelTrigger = (p = page) => p.locator('#model-version')
+
+async function selectModel(modelVersion, p = page) {
+  await modelTrigger(p).click()
+  await p.getByRole('option', { name: modelVersion }).click()
+  assert.equal(await modelTrigger(p).textContent(), modelVersion)
+}
+
+async function upload(file, expect, p = page) {
+  const before = (await events(expect, p)).length
+  const dropzone = p.locator('div.border-dashed')
+  await p.waitForFunction(
     (el) => !el.className.includes('cursor-not-allowed'),
     await dropzone.elementHandle()
   )
   // Click like a user: react-dropzone clears the input before opening the
   // dialog, so re-selecting the same file still triggers a new run.
   const [chooser] = await Promise.all([
-    page.waitForEvent('filechooser'),
+    p.waitForEvent('filechooser'),
     dropzone.click(),
   ])
   await chooser.setFiles(file)
-  await page.waitForFunction(
+  await p.waitForFunction(
     ([t, n]) => window.__events.filter((e) => e.type === t).length > n,
     [expect, before],
     { timeout: 120_000 }
   )
 }
 
-async function assertTrainedRun(runIndex) {
-  const completes = (await events('training-complete')).slice(runIndex * 2)
-  assert.deepEqual(
-    completes.map((e) => e.enableShortTerm),
-    [true, false]
-  )
-  for (const { parameters } of completes) {
-    assert.equal(parameters.length, 21)
-    assert.ok(parameters.every(Number.isFinite))
-  }
-  await page.getByText('Train Results').waitFor()
-  const lists = await page
+// Rendered results: the model row, both labels and both weight lists.
+async function renderedResults(p = page) {
+  await p.getByText('Train Results').waitFor()
+  const model = await p
+    .locator('dt', { hasText: 'Model Version' })
+    .locator('+ dd')
+    .textContent()
+  const labels = await p
+    .locator('dt', { hasText: 'Train Model' })
+    .locator('+ dd')
+    .allTextContents()
+  const lists = await p
     .locator('ol.list-decimal')
     .evaluateAll((ols) =>
       ols.map((ol) =>
         [...ol.querySelectorAll('li')].map((li) => +li.textContent)
       )
     )
-  assert.equal(lists.length, 2)
-  for (const values of lists) {
-    assert.equal(values.length, 21)
-    assert.ok(values.every(Number.isFinite))
-  }
+  return { model, labels, lists }
+}
+
+async function assertTrainedRun(runIndex, modelVersion) {
+  const completes = (await events('training-complete')).slice(
+    runIndex * 2,
+    runIndex * 2 + 2
+  )
+  assert.deepEqual(
+    completes.map(({ parameters, type, ...run }) => run),
+    RUNS[modelVersion].map((run) => ({ modelVersion, ...run }))
+  )
+  completes.forEach(({ parameters }, i) => {
+    assert.equal(parameters.length, WEIGHTS[modelVersion])
+    assert.ok(parameters.every(Number.isFinite))
+    // cardIds reached computeParameters.
+    assert.deepEqual(parameters, expected[modelVersion][i])
+    assert.notDeepEqual(parameters, expectedWithoutIds[modelVersion][i])
+  })
+  const progress = await events('progress')
+  assert.ok(progress.some((e) => e.modelVersion === modelVersion))
+  assert.deepEqual(await renderedResults(), {
+    model: modelVersion,
+    labels: LABELS[modelVersion],
+    lists: expected[modelVersion],
+  })
+}
+
+const VISUALIZER =
+  'https://open-spaced-repetition.github.io/anki_fsrs_visualizer/'
+
+// Copies result card `index` and checks the clipboard and the visualizer link
+// with the explicit model, all weights and the card's short-term flag.
+async function copyResult(modelVersion, index, enableShortTerm) {
+  const w = expected[modelVersion][index]
+  const button = page
+    .locator('dt', { hasText: 'Optimized Parameters' })
+    .locator('button')
+    .nth(index)
+  await button.click()
+  await page.waitForFunction(
+    (el) => el.textContent === 'Copied!',
+    await button.elementHandle()
+  )
+  assert.equal(
+    await page.evaluate(() => navigator.clipboard.readText()),
+    w.join(', ')
+  )
+  const href = `${VISUALIZER}?a=${modelVersion.toLowerCase()}&w=${w
+    .map((a) => a.toFixed(4))
+    .join(',')}&m=0.9&e=${enableShortTerm ? 1 : 0}`
+  const link = page.locator(`a[href="${href}"]`)
+  await link.waitFor()
+  const params = new URL(await link.getAttribute('href')).searchParams
+  assert.equal(params.get('a'), modelVersion.toLowerCase())
+  assert.equal(params.get('w').split(',').length, WEIGHTS[modelVersion])
 }
 
 test('page is served without cross-origin isolation', async () => {
@@ -116,25 +272,50 @@ test('page is served without cross-origin isolation', async () => {
   assert.equal(await page.evaluate(() => crossOriginIsolated), false)
 })
 
-test('trains both short-term settings in the worker', async () => {
+test('model selector defaults to FSRS-6', async () => {
+  assert.equal(await modelTrigger().textContent(), 'FSRS-6')
+})
+
+test('FSRS-6 trains short-term on/off in the worker', async () => {
   await upload(validCsv, 'done')
   const [converted] = await events('convert-complete')
   assert.ok(converted.fsrsItems > 0)
-  assert.ok((await events('progress')).length > 0)
-  await assertTrainedRun(0)
+  await assertTrainedRun(0, 'FSRS-6')
   assert.ok(
     wasmResponses.some((r) => r.ok()),
     'wasm32-wasip1 module was not fetched'
   )
+
+  await copyResult('FSRS-6', 0, true)
+  await copyResult('FSRS-6', 1, false)
 })
 
-test('trains again with the same worker', async () => {
+test('FSRS-7 trains scheduling penalties on/off with the same worker', async () => {
+  await selectModel('FSRS-7')
   await upload(validCsv, 'done')
-  await assertTrainedRun(1)
+  await assertTrainedRun(1, 'FSRS-7')
   assert.equal(await page.evaluate(() => window.__workers), 1)
+
+  // Both FSRS-7 cards link the visualizer with a=fsrs-7 and all 34 weights;
+  // FSRS-7 always trains with short-term enabled.
+  await copyResult('FSRS-7', 0, true)
+  await copyResult('FSRS-7', 1, true)
+})
+
+test('results keep the trained model when the selector changes', async () => {
+  await selectModel('FSRS-6')
+  assert.deepEqual(await renderedResults(), {
+    model: 'FSRS-7',
+    labels: LABELS['FSRS-7'],
+    lists: expected['FSRS-7'],
+  })
+  // A consecutive switch trains the newly selected model.
+  await upload(validCsv, 'done')
+  await assertTrainedRun(2, 'FSRS-6')
 })
 
 test('reports invalid CSV and recovers on retry', async () => {
+  await selectModel('FSRS-7')
   await upload(invalidCsv, 'error')
   const [error] = await events('error')
   assert.match(error.message, /CSV deserialization error/)
@@ -142,7 +323,100 @@ test('reports invalid CSV and recovers on retry', async () => {
   assert.equal(await page.getByText('Train Results').count(), 0)
 
   await upload(validCsv, 'done')
-  await assertTrainedRun(2)
+  await assertTrainedRun(3, 'FSRS-7')
   assert.equal(await page.evaluate(() => window.__workers), 2)
-  assert.deepEqual(pageErrors, [])
 })
+
+const CALLBACK_META = {
+  tz: 'UTC',
+  nextDayStartAt: 4,
+  total_rows: 0,
+  total_cards: 0,
+  total_fsrs_items: 0,
+}
+
+function expectedCallbackBody(modelVersion) {
+  const [on, off] = expected[modelVersion]
+  return modelVersion === 'FSRS-7'
+    ? {
+        model_version: 'FSRS-7',
+        ...CALLBACK_META,
+        penalties_enabled_params: on,
+        penalties_disabled_params: off,
+      }
+    : { ...CALLBACK_META, short_term_params: on, long_term_params: off }
+}
+
+// Finishes training number `index` on a page holding 'done': the results are
+// rendered while still training, no callback is sent, then releasing 'done'
+// sends exactly one callback whose receipt is awaited.
+async function finishHeldTraining(p, index, modelVersion, callbackPath) {
+  await p.waitForFunction(() => window.__heldDone.length === 1)
+  assert.equal((await events('training-complete', p)).length, 2 * index + 2)
+  await p.getByText(`Training ${modelVersion} ... 100%`).waitFor()
+  assert.equal(await p.evaluate(() => window.__doneDelivered), index)
+  assert.equal(received.length, index, 'callback sent before done')
+
+  const request = p.waitForRequest(
+    (r) => r.method() === 'POST' && new URL(r.url()).pathname === callbackPath
+  )
+  await p.evaluate(() => window.__releaseDone())
+  const response = await (await request).response()
+  assert.equal(response.status(), 200)
+  assert.equal(await p.evaluate(() => window.__doneDelivered), index + 1)
+  assert.equal(received.length, index + 1)
+  assert.equal((await renderedResults(p)).model, modelVersion)
+}
+
+for (const modelVersion of ['FSRS-6', 'FSRS-7']) {
+  const next = modelVersion === 'FSRS-6' ? 'FSRS-7' : 'FSRS-6'
+  test(`${modelVersion} hash callback fires once per training after a delayed done, direct and proxied`, async () => {
+    const local = `http://127.0.0.1:${receiver.address().port}`
+    const bodies = {}
+    for (const callbackOnClient of ['1', '0']) {
+      received.length = 0
+      const hash = new URLSearchParams({
+        csv: `${local}/revlog.csv`,
+        fetchOnClient: '1',
+        tz: 'UTC',
+        nextDayStartAt: '4',
+        callback: `${local}/hook`,
+        callbackOnClient,
+      })
+      // Omitting modelVersion must keep the FSRS-6 default.
+      if (modelVersion === 'FSRS-7') hash.set('modelVersion', modelVersion)
+      const callbackPath =
+        callbackOnClient === '1' ? '/hook' : '/api/support/callback'
+      const p = await context.newPage()
+      p.on('pageerror', (err) => pageErrors.push(err))
+      await p.addInitScript(() => {
+        window.__holdDone = true
+      })
+      await p.goto(`${server.baseUrl}/#${hash}`)
+
+      await finishHeldTraining(p, 0, modelVersion, callbackPath)
+      assert.equal(await modelTrigger(p).textContent(), modelVersion)
+      // Rapid second training with the other model on the same page.
+      await selectModel(next, p)
+      await upload(validCsv, 'convert-complete', p)
+      await finishHeldTraining(p, 1, next, callbackPath)
+
+      // Direct callbacks come from the page, proxied ones from the server.
+      for (const { origin } of received) {
+        assert.equal(
+          origin,
+          callbackOnClient === '1' ? server.baseUrl : undefined
+        )
+      }
+      bodies[callbackOnClient] = received.map((r) => r.body)
+      await p.close()
+    }
+
+    assert.deepEqual(bodies['1'], [
+      expectedCallbackBody(modelVersion),
+      expectedCallbackBody(next),
+    ])
+    assert.deepEqual(bodies['0'], bodies['1'])
+    assert.deepEqual(pageErrors, [])
+  })
+}

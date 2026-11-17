@@ -5,61 +5,83 @@
 // Threadless WASI Preview 1 build: no cross-origin isolation needed, and the
 // synchronous compute stays off the main thread inside this dedicated worker.
 import {
+  type ModelVersion as BindingModelVersion,
   computeParameters,
-  convertCsvToFsrsItems,
+  convertCsvToFsrsItemsWithCardIds,
 } from '@open-spaced-repetition/binding-wasm32-wasip1'
 
-// ts-fsrs 5.x schedules with FSRS-6 weights; binding defaults to FSRS-7.
-const MODEL_VERSION = 'FSRS-6'
+export type ModelVersion = `${BindingModelVersion}`
+
+// Each training compares two runs: FSRS-6 with/without short-term, FSRS-7
+// (always short-term) with/without scheduling penalties.
+export type TrainRun =
+  | { modelVersion: 'FSRS-6'; enableShortTerm: boolean }
+  | { modelVersion: 'FSRS-7'; enableSchedPenalties: boolean }
 
 export type TrainMessage = {
   type: 'train'
   csvData: ArrayBuffer
   timezone: string
   nextDayStartsAt: number
+  modelVersion: ModelVersion
 }
 
 export type WorkerMessage =
   | { type: 'ready' }
   | { type: 'convert-complete'; fsrsItems: number }
-  | {
+  | ({
       type: 'progress'
-      enableShortTerm: boolean
       current: number
       total: number
-    }
-  | {
+    } & TrainRun)
+  | ({
       type: 'training-complete'
-      enableShortTerm: boolean
       parameters: number[]
-    }
+    } & TrainRun)
   | { type: 'done' }
   | { type: 'error'; message: string }
+
+const runsOf = (modelVersion: ModelVersion): TrainRun[] =>
+  modelVersion === 'FSRS-7'
+    ? [
+        { modelVersion, enableSchedPenalties: true },
+        { modelVersion, enableSchedPenalties: false },
+      ]
+    : [
+        { modelVersion, enableShortTerm: true },
+        { modelVersion, enableShortTerm: false },
+      ]
 
 self.onmessage = async (e: MessageEvent<TrainMessage>) => {
   if (e.data?.type !== 'train') return
 
   try {
-    const { csvData, timezone, nextDayStartsAt } = e.data
-    const items = convertCsvToFsrsItems(
+    const { csvData, timezone, nextDayStartsAt, modelVersion } = e.data
+    const { items, cardIds } = convertCsvToFsrsItemsWithCardIds(
       new Uint8Array(csvData),
       nextDayStartsAt,
       timezone,
-      MODEL_VERSION
+      modelVersion
     )
     self.postMessage({
       type: 'convert-complete',
       fsrsItems: items.length,
     } satisfies WorkerMessage)
 
-    for (const enableShortTerm of [true, false]) {
+    for (const run of runsOf(modelVersion)) {
       const parameters = await computeParameters(items, {
-        enableShortTerm,
-        modelVersion: MODEL_VERSION,
+        modelVersion: run.modelVersion,
+        ...(run.modelVersion === 'FSRS-7'
+          ? {
+              enableShortTerm: true,
+              enableSchedPenalties: run.enableSchedPenalties,
+            }
+          : { enableShortTerm: run.enableShortTerm }),
+        cardIds,
         progress: (current: number, total: number) => {
           self.postMessage({
             type: 'progress',
-            enableShortTerm,
+            ...run,
             current,
             total,
           } satisfies WorkerMessage)
@@ -67,7 +89,7 @@ self.onmessage = async (e: MessageEvent<TrainMessage>) => {
       })
       self.postMessage({
         type: 'training-complete',
-        enableShortTerm,
+        ...run,
         parameters: Array.from(parameters),
       } satisfies WorkerMessage)
     }
